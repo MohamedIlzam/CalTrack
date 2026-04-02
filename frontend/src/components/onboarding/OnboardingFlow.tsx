@@ -1,22 +1,25 @@
 "use client";
 
 import React, { useState } from "react";
-import { Step1Welcome } from "./Step1Welcome";
+import { Step0Welcome } from "./Step0Welcome";
+import { Step1Goal } from "./Step1Goal";
 import { Step2BodyDetails } from "./Step2BodyDetails";
 import { Step3Activity } from "./Step3Activity";
 import { Step4Food } from "./Step4Food";
 
 export function OnboardingFlow() {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
   const totalSteps = 5;
 
   const handleNext = () => setStep((s) => Math.min(s + 1, totalSteps));
-  const handleBack = () => setStep((s) => Math.max(s - 1, 1));
+  const handleBack = () => setStep((s) => Math.max(s - 1, 0));
 
   const renderStep = () => {
     switch (step) {
+      case 0:
+        return <Step0Welcome onNext={handleNext} />;
       case 1:
-        return <Step1Welcome onNext={handleNext} />;
+        return <Step1Goal onNext={handleNext} onBack={handleBack} />;
       case 2:
         return <Step2BodyDetails onNext={handleNext} onBack={handleBack} />;
       case 3:
