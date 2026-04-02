@@ -8,7 +8,7 @@ interface Props {
 
 export function Step1Welcome({ onNext }: Props) {
   return (
-    <div className="flex flex-col min-h-screen bg-surface px-6 pt-6 pb-8">
+    <div className="flex flex-col min-h-[100dvh] bg-surface px-6 pt-6 pb-8">
       {/* Top Header */}
       <div className="flex items-center text-primary font-bold text-lg mb-4">
         <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>

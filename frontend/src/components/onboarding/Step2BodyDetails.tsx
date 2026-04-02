@@ -40,8 +40,8 @@ export function Step2BodyDetails({ onNext, onBack }: Props) {
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-gray-700">Gender</label>
             <div className="relative bg-gray-50 rounded-2xl flex items-center px-4 h-[60px]">
-              <select className="bg-transparent w-full font-bold text-lg text-gray-900 outline-none appearance-none cursor-pointer">
-                <option value="" disabled selected hidden>Select</option>
+              <select defaultValue="" className="bg-transparent w-full font-bold text-lg text-gray-900 outline-none appearance-none cursor-pointer">
+                <option value="" disabled hidden>Select</option>
                 <option value="m">Male</option>
                 <option value="f">Female</option>
               </select>
