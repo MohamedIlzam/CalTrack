@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Core brand colors based on CalTrack templates */
+  --color-primary: #129B7F; /* Dark green/teal used in active buttons */
+  --color-primary-light: #EBF8F5; /* Light mint background */
+  --color-secondary: #0D6956; /* Darker text green */
+  --color-warning-bg: #FFEAD2; /* Soft orange/yellow background for tips */
+  --color-warning-text: #A86A1D; /* Darker orange for tip text */
+  --color-background: #F9FAFB; /* Off white background for the 'device' wrapper */
+  --color-surface: #FFFFFF; /* White card backgrounds */
+  --color-foreground: #111827; /* Very dark slate for primary text */
+  --color-muted: #6B7280; /* Gray for labels and helper text */
+  
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans), sans-serif;
+  /* Slight mobile-like smoothing */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
