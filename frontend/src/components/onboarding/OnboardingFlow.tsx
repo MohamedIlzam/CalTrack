@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Step0Welcome } from "./Step0Welcome";
 import { Step1Goal } from "./Step1Goal";
 import { Step2BodyDetails } from "./Step2BodyDetails";
@@ -9,6 +10,7 @@ import { Step4Food } from "./Step4Food";
 import { Step5Target } from "./Step5Target";
 
 export function OnboardingFlow() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const totalSteps = 5;
 
@@ -28,7 +30,7 @@ export function OnboardingFlow() {
       case 4:
         return <Step4Food onNext={handleNext} onBack={handleBack} />;
       case 5:
-        return <Step5Target onNext={() => console.log('Complete Onboarding!')} onBack={handleBack} />;
+        return <Step5Target onNext={() => router.push('/home')} onBack={handleBack} />;
       default:
         return null;
     }
