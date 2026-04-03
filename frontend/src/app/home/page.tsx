@@ -53,23 +53,28 @@ export default function HomePage() {
                   Remaining
                 </p>
                 
-                {/* Half Circle Gauge & Calories */}
-                <div className="relative flex flex-col items-center mt-3 max-w-[120px] mx-auto">
-                  <svg viewBox="0 0 100 50" className="w-[105px] drop-shadow-sm overflow-visible">
-                    {/* Background track */}
-                    <path d="M 5,45 A 40,40 0 1,1 95,45" fill="none" stroke="rgba(0, 87, 77, 0.15)" strokeWidth="10" strokeLinecap="round" />
-                    {/* Progress track */}
-                    <path d="M 5,45 A 40,40 0 1,1 95,45" fill="none" stroke="#00574D" strokeWidth="10" strokeLinecap="round" strokeDasharray="125.6" strokeDashoffset="40" />
-                  </svg>
+                {/* Half Circle Gauge & Calories Wrapper */}
+                <div className="relative w-full h-[120px] flex items-center justify-center mt-3 mb-2">
+                  {/* SVG Arc - Absolute positioned */}
+                  <div className="absolute inset-0 flex justify-center h-full pointer-events-none">
+                    <svg viewBox="0 0 100 50" className="w-[150px] drop-shadow-sm overflow-visible">
+                      {/* Background track - Lighter & Thinner */}
+                      <path d="M 12,45 A 38,38 0 1,1 88,45" fill="none" stroke="rgba(0, 87, 77, 0.1)" strokeWidth="5" strokeLinecap="round" />
+                      {/* Progress track - Thinner */}
+                      <path d="M 12,45 A 38,38 0 1,1 88,45" fill="none" stroke="#00574D" strokeWidth="5" strokeLinecap="round" strokeDasharray="119.38" strokeDashoffset="40" />
+                    </svg>
+                  </div>
                   
-                  <div className="absolute bottom-[2px] flex flex-col items-center justify-center">
-                    <span className="text-[34px] font-extrabold text-[#00574D] tracking-[-1px] leading-none">1,250</span>
-                    <span className="text-[12px] font-bold text-[#00574D]/70 mt-1 uppercase tracking-widest">kcal</span>
+                  {/* Calorie Text Stack - Adjusted centering */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pt-10 z-10">
+                    <span className="text-[36px] font-extrabold text-[#00574D] tracking-[-1.5px] leading-none mb-1">1,250</span>
+                    <span className="text-[11px] font-bold text-[#00574D]/50 uppercase tracking-[2px] leading-none">kcal left</span>
                   </div>
                 </div>
               </div>
 
-              <div className="border-t border-[#00574D]/10 pt-3 mt-4">
+              {/* Bottom stats with increased separation */}
+              <div className="border-t border-[#00574D]/10 pt-4 mt-auto mb-1">
                 <div className="flex justify-between items-center mb-1.5">
                   <span className="text-[11px] font-semibold text-[#00574D]/70 uppercase">Consumed</span>
                   <span className="text-[15px] font-bold text-[#00574D]">600</span>
