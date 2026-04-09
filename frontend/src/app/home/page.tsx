@@ -301,6 +301,64 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Snacks Section */}
+        <div>
+          <div className="flex justify-between items-end mb-3">
+            <h3 className="text-[20px] font-extrabold text-[#1A1C1C] tracking-[-0.5px]">
+              Snacks
+            </h3>
+            <span className="text-[12px] font-bold text-[#3C4A46]/40 uppercase tracking-[1.2px] mb-0.5">
+              EMPTY
+            </span>
+          </div>
+
+          <button className="w-full bg-[#FFFBF4] border border-[#855300]/10 rounded-[16px] px-5 py-4 flex items-center gap-4 active:scale-[0.98] transition-transform hover:bg-[#FFF8EE]">
+            {/* Cookie icon */}
+            <div className="w-11 h-11 rounded-xl bg-[#FFAD3A]/15 flex items-center justify-center flex-shrink-0">
+              <svg
+                className="w-5 h-5 text-[#855300]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8c.83 0 1.5-.67 1.5-1.5S12.83 5 12 5s-1.5.67-1.5 1.5S11.17 8 12 8zm-2 4c.83 0 1.5-.67 1.5-1.5S10.83 9 10 9s-1.5.67-1.5 1.5S9.17 12 10 12zm5 2c.83 0 1.5-.67 1.5-1.5S15.83 11 15 11s-1.5.67-1.5 1.5S14.17 14 15 14z"
+                />
+                <circle cx="12" cy="12" r="9" strokeWidth={2} />
+              </svg>
+            </div>
+
+            {/* Label */}
+            <div className="flex-1 text-left">
+              <p className="text-[14px] font-bold text-[#1A1C1C]">
+                Had a snack today?
+              </p>
+              <p className="text-[12px] font-medium text-[#855300]/70 mt-0.5">
+                Track bites between meals
+              </p>
+            </div>
+
+            {/* Add icon */}
+            <div className="w-9 h-9 rounded-full bg-[#FFAD3A]/20 flex items-center justify-center flex-shrink-0">
+              <svg
+                className="w-4 h-4 text-[#855300]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </div>
+          </button>
+        </div>
         {/* Mindful Tip */}
         <div className="bg-[#F3F3F3] rounded-[24px] p-6 mt-4 relative overflow-hidden">
           <h4 className="text-[20px] font-extrabold text-[#1A1C1C] mb-2">
