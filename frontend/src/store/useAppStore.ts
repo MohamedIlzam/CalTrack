@@ -23,6 +23,7 @@ interface OnboardingState {
   name: string;
   goal: Goal;
   weightKg: number;
+  targetWeightKg: number;
   heightCm: number;
   activityLevel: ActivityLevel;
   targetCalories: number;
@@ -54,6 +55,7 @@ export const useAppStore = create<AppStore>((set) => ({
   name: "",
   goal: "lose",
   weightKg: 0,
+  targetWeightKg: 0,
   heightCm: 0,
   activityLevel: "sedentary",
   targetCalories: 0,
