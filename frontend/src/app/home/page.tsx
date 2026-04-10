@@ -1,7 +1,24 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { CalorieCard } from "@/components/ui/CalorieCard";
+import { useAppStore, selectConsumedKcal } from "@/store/useAppStore";
 
 export default function HomePage() {
+  const router = useRouter();
+  const targetCalories = useAppStore((s) => s.targetCalories) || 1850;
+  const targetCarbsG = useAppStore((s) => s.targetCarbsG) || 250;
+  const targetProteinG = useAppStore((s) => s.targetProteinG) || 120;
+  const targetFatG = useAppStore((s) => s.targetFatG) || 65;
+  const consumed = useAppStore(selectConsumedKcal);
+  const consumedCarbs = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.carbs, 0));
+  const consumedProtein = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.protein, 0));
+  const consumedFat = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.fat, 0));
+
+  const remaining = Math.max(0, targetCalories - consumed);
+  const progress = targetCalories > 0 ? consumed / targetCalories : 0;
+
   return (
     <div className="min-h-screen bg-[#F9F9F9] pb-[100px] font-sans pt-[72px]">
       {/* Fixed Header */}
@@ -51,10 +68,10 @@ export default function HomePage() {
           {/* Main Teal Card */}
           <div className="relative z-10 w-[56%]">
             <CalorieCard
-              remaining={1250}
-              consumed={600}
-              burned={200}
-              progress={0.66}
+              remaining={remaining}
+              consumed={consumed}
+              burned={0}
+              progress={progress}
             />
           </div>
 
@@ -67,14 +84,14 @@ export default function HomePage() {
               </p>
               <div className="flex items-baseline gap-1">
                 <span className="text-[18px] font-extrabold text-[#1A1C1C] leading-none">
-                  112
+                  {consumedCarbs}
                 </span>
                 <span className="text-[11px] font-medium text-[#3C4A46] leading-none">
-                  / 250g
+                  / {targetCarbsG}g
                 </span>
               </div>
               <div className="w-full h-[6px] bg-[#F3F3F3] rounded-full overflow-hidden">
-                <div className="h-full bg-[#FFAD3A] w-[55%] rounded-full"></div>
+                <div className="h-full bg-[#FFAD3A] rounded-full" style={{ width: `${Math.min(100, Math.round((consumedCarbs / targetCarbsG) * 100))}%` }}></div>
               </div>
             </div>
 
@@ -85,14 +102,14 @@ export default function HomePage() {
               </p>
               <div className="flex items-baseline gap-1">
                 <span className="text-[18px] font-extrabold text-[#1A1C1C] leading-none">
-                  45
+                  {consumedProtein}
                 </span>
                 <span className="text-[11px] font-medium text-[#3C4A46] leading-none">
-                  / 120g
+                  / {targetProteinG}g
                 </span>
               </div>
               <div className="w-full h-[6px] bg-[#F3F3F3] rounded-full overflow-hidden">
-                <div className="h-full bg-[#643E00] w-[37%] rounded-full"></div>
+                <div className="h-full bg-[#643E00] rounded-full" style={{ width: `${Math.min(100, Math.round((consumedProtein / targetProteinG) * 100))}%` }}></div>
               </div>
             </div>
 
@@ -103,14 +120,14 @@ export default function HomePage() {
               </p>
               <div className="flex items-baseline gap-1">
                 <span className="text-[18px] font-extrabold text-[#1A1C1C] leading-none">
-                  18
+                  {consumedFat}
                 </span>
                 <span className="text-[11px] font-medium text-[#3C4A46] leading-none">
-                  / 65g
+                  / {targetFatG}g
                 </span>
               </div>
               <div className="w-full h-[6px] bg-[#F3F3F3] rounded-full overflow-hidden">
-                <div className="h-full bg-[#005047] w-[27%] rounded-full"></div>
+                <div className="h-full bg-[#005047] rounded-full" style={{ width: `${Math.min(100, Math.round((consumedFat / targetFatG) * 100))}%` }}></div>
               </div>
             </div>
           </div>
@@ -208,7 +225,7 @@ export default function HomePage() {
               <span className="text-[14px] font-bold text-[#3C4A46]">60</span>
             </div>
 
-            <button className="w-full py-2.5 bg-[#F3F3F3] text-[#006B5F] rounded-xl flex items-center justify-center gap-2 mt-2 transition-colors hover:bg-gray-200">
+            <button onClick={() => router.push("/search?meal=breakfast")} className="w-full py-2.5 bg-[#F3F3F3] text-[#006B5F] rounded-xl flex items-center justify-center gap-2 mt-2 transition-colors hover:bg-gray-200">
               <svg
                 className="w-4 h-4"
                 fill="none"
@@ -259,7 +276,7 @@ export default function HomePage() {
               What did you have for lunch?
             </p>
 
-            <button className="px-6 py-2.5 bg-[#006B5F] text-white rounded-full text-[12px] font-bold uppercase tracking-[1.2px] mt-1 shadow-[0_10px_15px_-3px_rgba(0,107,95,0.2)]">
+            <button onClick={() => router.push("/search?meal=lunch")} className="px-6 py-2.5 bg-[#006B5F] text-white rounded-full text-[12px] font-bold uppercase tracking-[1.2px] mt-1 shadow-[0_10px_15px_-3px_rgba(0,107,95,0.2)]">
               Log Lunch
             </button>
           </div>
@@ -295,7 +312,7 @@ export default function HomePage() {
               Plan your dinner in advance
             </p>
 
-            <button className="px-6 py-2.5 border border-[#006B5F]/20 text-[#006B5F] rounded-full text-[12px] font-bold uppercase tracking-[1.2px] mt-1">
+            <button onClick={() => router.push("/search?meal=dinner")} className="px-6 py-2.5 border border-[#006B5F]/20 text-[#006B5F] rounded-full text-[12px] font-bold uppercase tracking-[1.2px] mt-1">
               Quick Add
             </button>
           </div>
@@ -312,7 +329,7 @@ export default function HomePage() {
             </span>
           </div>
 
-          <button className="w-full bg-[#FFFBF4] border border-[#855300]/10 rounded-[16px] px-5 py-4 flex items-center gap-4 active:scale-[0.98] transition-transform hover:bg-[#FFF8EE]">
+          <button onClick={() => router.push("/search?meal=snacks")} className="w-full bg-[#FFFBF4] border border-[#855300]/10 rounded-[16px] px-5 py-4 flex items-center gap-4 active:scale-[0.98] transition-transform hover:bg-[#FFF8EE]">
             {/* Cookie icon */}
             <div className="w-11 h-11 rounded-xl bg-[#FFAD3A]/15 flex items-center justify-center flex-shrink-0">
               <svg

@@ -1,7 +1,10 @@
+"use client";
+
 import React, { useState, useMemo } from "react";
 import { OnboardingShell } from "./OnboardingShell";
 import { BottomNavFooter } from "../ui/BottomNavFooter";
 import { ProTipCard } from "../ui/ProTipCard";
+import { useAppStore } from "@/store/useAppStore";
 
 interface Props {
   onNext: () => void;
@@ -9,6 +12,7 @@ interface Props {
 }
 
 export function Step2BodyDetails({ onNext, onBack }: Props) {
+  const setOnboarding = useAppStore((s) => s.setOnboarding);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
   const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>('cm');
   
@@ -49,6 +53,27 @@ export function Step2BodyDetails({ onNext, onBack }: Props) {
     return { label: "Obese", color: "text-[#E11D48]" };
   }, [bmi]);
 
+  const handleNext = () => {
+    // Resolve to kg
+    let wKg = 0;
+    if (weightVal) {
+      wKg = weightUnit === 'kg' ? parseFloat(weightVal) : parseFloat(weightVal) * 0.453592;
+    }
+    // Resolve to cm
+    let hCm = 0;
+    if (heightUnit === 'cm') {
+      hCm = parseFloat(heightCm) || 0;
+    } else {
+      const ft = parseFloat(heightFt || "0");
+      const inch = parseFloat(heightIn || "0");
+      hCm = (ft * 12 + inch) * 2.54;
+    }
+    if (wKg > 0 && hCm > 0) {
+      setOnboarding({ weightKg: wKg, heightCm: hCm });
+    }
+    onNext();
+  };
+
   const markerPosition = useMemo(() => {
     if (!bmi) return 0;
     if (bmi < 18.5) {
@@ -66,7 +91,7 @@ export function Step2BodyDetails({ onNext, onBack }: Props) {
       headerTitle="Personal"
       step={2}
       onBack={onBack}
-      footer={<BottomNavFooter onNext={onNext} onBack={onBack} />}
+      footer={<BottomNavFooter onNext={handleNext} onBack={onBack} />}
     >
       <div className="flex flex-col gap-5 py-2">
         <div>

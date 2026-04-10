@@ -1,9 +1,33 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
+import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore";
+
+// Static food data — in a real app this would come from an API
+const FOOD_ITEMS: Omit<FoodEntry, "id" | "meal">[] = [
+  { name: "Egg Hopper",      kcal: 125, carbs: 18, protein: 5,  fat: 4,  serving: "1 piece" },
+  { name: "String Hoppers",  kcal: 210, carbs: 42, protein: 6,  fat: 2,  serving: "5 pieces" },
+  { name: "Pol Sambol",      kcal: 85,  carbs: 3,  protein: 1,  fat: 8,  serving: "2 tbsp" },
+  { name: "Fish Roti",       kcal: 240, carbs: 30, protein: 12, fat: 8,  serving: "1 piece" },
+];
 
 export default function SearchPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const meal = (searchParams.get("meal") ?? "breakfast") as MealSlot;
+  const addFoodEntry = useAppStore((s) => s.addFoodEntry);
+
+  const handleAdd = (item: Omit<FoodEntry, "id" | "meal">) => {
+    addFoodEntry({
+      ...item,
+      id: `${Date.now()}-${Math.random()}`,
+      meal,
+    });
+    router.push("/home");
+  };
+
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -156,115 +180,27 @@ export default function SearchPage() {
           </div>
 
           <div className="flex flex-col gap-3">
-            
-            {/* Item 1 */}
-            <div className="flex items-center justify-between p-3 bg-white rounded-[24px] shadow-sm border border-[#BACAC5]/15 group active:scale-[0.99] transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-[56px] h-[56px] rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                  <img
-                    className="w-full h-full object-cover"
-                    alt="Egg Hopper"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuDBloTyTvz7LU6XmNbTS_Nhc9l6JWFLMoZoOwAvIGINydUD0C6CSTKxs2fDeO9wlHkVw2qkK7D13rHw-8pbFyRlVUOB1LD4vY3NH6UIbGvpfsq3OJQ0JuU1nM88sF2xRvaWwtrVQ-obsrbq3aMb17uK9R9czrq444-AyA321Ex_gdBCCLzPwLgbwm-I5GsWWIsW3L7DT-IUYEsLAiKUJVNO2dC7Xxf_iAs20GgEtj6_9FZA0Cx6Kg2ZcjN6tJXRemxogFHgjaYgeuU"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="font-extrabold text-[15px] text-[#1A1C1C]">Egg Hopper</h3>
-                    <svg className="w-4 h-4 text-[#006B5F]" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
+            {FOOD_ITEMS.map((item) => (
+              <div key={item.name} className="flex items-center justify-between p-3 bg-white rounded-[24px] shadow-sm border border-[#BACAC5]/15 group active:scale-[0.99] transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="w-[56px] h-[56px] rounded-full bg-[#F3F3F3] flex items-center justify-center overflow-hidden">
+                    <span className="text-2xl">🍽️</span>
                   </div>
-                  <p className="text-[13px] font-medium text-[#3C4A46] mt-0.5">125 kcal • 1 Piece</p>
-                </div>
-              </div>
-              <button className="w-10 h-10 rounded-full bg-[#006B5F]/10 text-[#006B5F] flex items-center justify-center transition-all active:scale-90 mr-1">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Item 2 */}
-            <div className="flex items-center justify-between p-3 bg-white rounded-[24px] shadow-sm border border-[#BACAC5]/15 group active:scale-[0.99] transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-[56px] h-[56px] rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                  <img
-                    className="w-full h-full object-cover"
-                    alt="String Hoppers"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1EwlEhYtMHpOAi9RnxngKu_SA-HcY1O6kgT41QEh4Bwzmql4MOYJ8bXw3pul_M-xNPDASPSgqIrbP2MhwiiZIdOmm6kurcIJuijvPXvP3jpkhS4LqgByYMLmVgKMcFTfSLH2UGz4H0lb-YASiHwK3O-la8OfM3vI8mh2CEd-EiWfx4aL90tuVuAxXOZF_ZO6b5PKQy2-z7k97dINFcbjgmRZv6HelEUetnHarG2WYrydQ_TVYzUi8beOnBNhSMJBLCWJGJ17_83U"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-[15px] text-[#1A1C1C]">String Hoppers</h3>
-                    <span className="px-2 py-[2px] rounded-full bg-[#F3F3F3] text-[#3C4A46] text-[9px] font-bold uppercase tracking-wider border border-gray-200">
-                      Estimated
-                    </span>
+                  <div>
+                    <h3 className="font-extrabold text-[15px] text-[#1A1C1C]">{item.name}</h3>
+                    <p className="text-[13px] font-medium text-[#3C4A46] mt-0.5">{item.kcal} kcal • {item.serving}</p>
                   </div>
-                  <p className="text-[13px] font-medium text-[#3C4A46] mt-0.5">210 kcal • 5 Pieces</p>
                 </div>
+                <button
+                  onClick={() => handleAdd(item)}
+                  className="w-10 h-10 rounded-full bg-[#006B5F]/10 text-[#006B5F] flex items-center justify-center transition-all active:scale-90 mr-1"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
               </div>
-              <button className="w-10 h-10 rounded-full bg-[#006B5F]/10 text-[#006B5F] flex items-center justify-center transition-all active:scale-90 mr-1">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Item 3 */}
-            <div className="flex items-center justify-between p-3 bg-white rounded-[24px] shadow-sm border border-[#BACAC5]/15 group active:scale-[0.99] transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-[56px] h-[56px] rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                  <img
-                    className="w-full h-full object-cover"
-                    alt="Pol Sambol"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuDztIA7xYv_AlycOZStOG3O99zYN9SH-34MKsOOE48pRGORsyPrZgFx-1qrBKNOb7qRVi0kL9PPQAia3h9V7SOUX-GXphkbuivmdMTZqEM9LxaCxSPDqlVJJN9RqvRXs4vEHYRUnalwULbOjO17dwnKLQuEHbFBKBJ2rDxxRMm-YCQrtSU6c0HXQsRUwO8HVVplDJGY-fIlIkkYQnr2rbJdQehS9-FPVHZowhNShPC8A2usYgWobr4pVN8lDoMoDVIa5BWaOHbokV4"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="font-extrabold text-[15px] text-[#1A1C1C]">Pol Sambol</h3>
-                    <svg className="w-4 h-4 text-[#006B5F]" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <p className="text-[13px] font-medium text-[#3C4A46] mt-0.5">85 kcal • 2 tbsp</p>
-                </div>
-              </div>
-              <button className="w-10 h-10 rounded-full bg-[#006B5F]/10 text-[#006B5F] flex items-center justify-center transition-all active:scale-90 mr-1">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Item 4 */}
-            <div className="flex items-center justify-between p-3 bg-white rounded-[24px] shadow-sm border border-[#BACAC5]/15 group active:scale-[0.99] transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-[56px] h-[56px] rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                  <img
-                    className="w-full h-full object-cover"
-                    alt="Fish Roti"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuAUwKN8UbpTkdnmcNFunXzhTdGmnm6SUum8HZZC9MsDrjohEMBqX58wLN6wz0igEnZ246tcG4m7xJtzhoRR1YrJYOVFDNl95B3Aqy5LSREffKskNqmAqBWV8GI-P6q-U3_pvmnUmUyaJ1MrGFKJQRVeYNKyFvtPQV1ZAsgm9bm0tS2HlpJMYTUyrkYl4p8so3WBtJm8pAI5FhqsImW4ZUhoIMlAS98lNnIm7bvHMp5HBET0OTLH7RrbnB3oX5kbdo4yfR5FzXGk594"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-[15px] text-[#1A1C1C]">Fish Roti</h3>
-                    <span className="px-2 py-[2px] rounded-full bg-[#F3F3F3] text-[#3C4A46] text-[9px] font-bold uppercase tracking-wider border border-gray-200">
-                      Estimated
-                    </span>
-                  </div>
-                  <p className="text-[13px] font-medium text-[#3C4A46] mt-0.5">240 kcal • 1 Piece</p>
-                </div>
-              </div>
-              <button className="w-10 h-10 rounded-full bg-[#006B5F]/10 text-[#006B5F] flex items-center justify-center transition-all active:scale-90 mr-1">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-            </div>
-
+            ))}
           </div>
         </section>
       </main>

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { OnboardingShell } from "./OnboardingShell";
 import { BottomNavFooter } from "../ui/BottomNavFooter";
+import { useAppStore, type Goal } from "@/store/useAppStore";
 
 interface Props {
   onNext: () => void;
@@ -41,13 +42,19 @@ const goals = [
 
 export function Step1Goal({ onNext, onBack }: Props) {
   const [selected, setSelected] = useState("lose");
+  const setOnboarding = useAppStore((s) => s.setOnboarding);
+
+  const handleNext = () => {
+    setOnboarding({ goal: selected as Goal });
+    onNext();
+  };
 
   return (
     <OnboardingShell
       headerTitle="Goal"
       step={1}
       onBack={onBack}
-      footer={<BottomNavFooter onNext={onNext} onBack={onBack} />}
+      footer={<BottomNavFooter onNext={handleNext} onBack={onBack} />}
     >
       <div className="flex flex-col py-2">
         <h1 className="text-[2rem] font-bold text-gray-900 mb-8 tracking-tight">

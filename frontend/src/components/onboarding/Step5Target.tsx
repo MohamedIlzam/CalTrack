@@ -1,14 +1,32 @@
 "use client";
 
-import React from "react";
 import { Button } from "../ui/Button";
+import { useAppStore } from "@/store/useAppStore";
 
 interface Props {
   onNext: () => void;
   onBack?: () => void;
 }
 
+const GOAL_LABEL: Record<string, string> = {
+  lose: "Optimized for Weight Loss",
+  maintain: "Optimized for Maintenance",
+  gain: "Optimized for Weight Gain",
+};
+
 export function Step5Target({ onNext, onBack }: Props) {
+  const targetCalories = useAppStore((s) => s.targetCalories);
+  const targetProteinG = useAppStore((s) => s.targetProteinG);
+  const targetCarbsG = useAppStore((s) => s.targetCarbsG);
+  const targetFatG = useAppStore((s) => s.targetFatG);
+  const goal = useAppStore((s) => s.goal);
+
+  // Fallback to sensible defaults if onboarding was skipped
+  const calories = targetCalories || 1850;
+  const protein = targetProteinG || 92;
+  const carbs = targetCarbsG || 231;
+  const fat = targetFatG || 62;
+
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#F9FAFB] w-full relative">
       {/* Header */}
@@ -38,7 +56,7 @@ export function Step5Target({ onNext, onBack }: Props) {
               DAILY TARGET
             </h2>
             <div className="flex items-baseline gap-2 mb-6">
-              <span className="text-[3.5rem] font-black tracking-[-2px] leading-none">1,850</span>
+              <span className="text-[3.5rem] font-black tracking-[-2px] leading-none">{calories.toLocaleString()}</span>
               <span className="text-[16px] font-semibold text-[#004B40]/80">kcal / day</span>
             </div>
             
@@ -48,7 +66,7 @@ export function Step5Target({ onNext, onBack }: Props) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <span className="text-[13px] font-bold">Optimized for Weight Loss</span>
+              <span className="text-[13px] font-bold">{GOAL_LABEL[goal]}</span>
             </div>
           </div>
         </div>
@@ -63,7 +81,7 @@ export function Step5Target({ onNext, onBack }: Props) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 17c3.314 0 6-2.686 6-6s-2.686-6-6-6-6 2.686-6 6 2.686 6 6 6z" />
               </svg>
             </div>
-            <span className="text-[22px] font-black text-gray-900 leading-none mb-1">92g</span>
+            <span className="text-[22px] font-black text-gray-900 leading-none mb-1">{protein}g</span>
             <span className="text-[10px] font-bold text-gray-400 tracking-[1.5px] uppercase">Protein</span>
           </div>
 
@@ -75,7 +93,7 @@ export function Step5Target({ onNext, onBack }: Props) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 11a5 5 0 0110 0" />
               </svg>
             </div>
-            <span className="text-[22px] font-black text-gray-900 leading-none mb-1">231g</span>
+            <span className="text-[22px] font-black text-gray-900 leading-none mb-1">{carbs}g</span>
             <span className="text-[10px] font-bold text-gray-400 tracking-[1.5px] uppercase">Carbs</span>
           </div>
 
@@ -86,7 +104,7 @@ export function Step5Target({ onNext, onBack }: Props) {
                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 3a9 9 0 00-6 15l6 3 6-3a9 9 0 00-6-15z" />
               </svg>
             </div>
-            <span className="text-[22px] font-black text-gray-900 leading-none mb-1">62g</span>
+            <span className="text-[22px] font-black text-gray-900 leading-none mb-1">{fat}g</span>
             <span className="text-[10px] font-bold text-gray-400 tracking-[1.5px] uppercase">Fat</span>
           </div>
         </div>
