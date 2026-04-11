@@ -37,8 +37,10 @@ export function OnboardingFlow() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-surface w-full">
-      {renderStep()}
+    <div className="min-h-screen bg-surface md:bg-gray-100 md:flex md:justify-center">
+      <div className="w-full md:max-w-[430px] md:min-h-screen bg-surface md:shadow-2xl">
+        {renderStep()}
+      </div>
     </div>
   );
 }

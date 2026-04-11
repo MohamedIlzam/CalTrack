@@ -15,7 +15,7 @@ export function BottomNavFooter({
   showBack = true,
 }: BottomNavFooterProps) {
   return (
-    <div className="w-full px-6 py-4 pb-6 bg-surface flex items-center justify-between">
+    <div className="w-full px-4 sm:px-6 py-3 sm:py-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] bg-surface flex items-center justify-between">
       {showBack ? (
         <button
           onClick={onBack}
