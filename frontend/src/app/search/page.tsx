@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore";
@@ -13,7 +13,7 @@ const FOOD_ITEMS: Omit<FoodEntry, "id" | "meal">[] = [
   { name: "Fish Roti",       kcal: 240, carbs: 30, protein: 12, fat: 8,  serving: "1 piece" },
 ];
 
-export default function SearchPage() {
+function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const meal = (searchParams.get("meal") ?? "breakfast") as MealSlot;
@@ -32,7 +32,6 @@ export default function SearchPage() {
 
   useEffect(() => {
     const handleScroll = () => {
-      // Toggle state when scrolled past the starting position of the search bar
       setIsScrolled(window.scrollY > 20);
     };
     window.addEventListener("scroll", handleScroll);
@@ -207,5 +206,13 @@ export default function SearchPage() {
 
       <AppBottomNav activeTab="search" />
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F9F9F9]" />}>
+      <SearchContent />
+    </Suspense>
   );
 }
