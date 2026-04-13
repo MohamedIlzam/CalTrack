@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 /* ─────────────── Types ─────────────── */
 
@@ -20,6 +21,7 @@ export interface FoodEntry {
 /* ─────────────── Onboarding slice ─────────────── */
 
 interface OnboardingState {
+  hasOnboarded: boolean;
   name: string;
   goal: Goal;
   weightKg: number;
@@ -42,39 +44,53 @@ interface DailyLogState {
 
 interface Actions {
   setOnboarding: (data: Partial<OnboardingState>) => void;
+  completeOnboarding: () => void;
   addFoodEntry: (entry: FoodEntry) => void;
   removeFoodEntry: (id: string) => void;
+  clearEntries: () => void;
 }
 
 /* ─────────────── Store ─────────────── */
 
 interface AppStore extends OnboardingState, DailyLogState, Actions {}
 
-export const useAppStore = create<AppStore>((set) => ({
-  // Onboarding defaults
-  name: "",
-  goal: "lose",
-  weightKg: 0,
-  targetWeightKg: 0,
-  heightCm: 0,
-  activityLevel: "sedentary",
-  targetCalories: 0,
-  targetProteinG: 0,
-  targetCarbsG: 0,
-  targetFatG: 0,
+export const useAppStore = create<AppStore>()(
+  persist(
+    (set) => ({
+      // Onboarding defaults
+      hasOnboarded: false,
+      name: "",
+      goal: "lose",
+      weightKg: 0,
+      targetWeightKg: 0,
+      heightCm: 0,
+      activityLevel: "sedentary",
+      targetCalories: 0,
+      targetProteinG: 0,
+      targetCarbsG: 0,
+      targetFatG: 0,
 
-  // Daily log defaults
-  entries: [],
+      // Daily log defaults
+      entries: [],
 
-  // Actions
-  setOnboarding: (data) => set((state) => ({ ...state, ...data })),
+      // Actions
+      setOnboarding: (data) => set((state) => ({ ...state, ...data })),
 
-  addFoodEntry: (entry) =>
-    set((state) => ({ entries: [...state.entries, entry] })),
+      completeOnboarding: () => set({ hasOnboarded: true }),
 
-  removeFoodEntry: (id) =>
-    set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),
-}));
+      addFoodEntry: (entry) =>
+        set((state) => ({ entries: [...state.entries, entry] })),
+
+      removeFoodEntry: (id) =>
+        set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),
+
+      clearEntries: () => set({ entries: [] }),
+    }),
+    {
+      name: "caltrack-storage",
+    }
+  )
+);
 
 /* ─────────────── Derived selectors ─────────────── */
 

@@ -20,6 +20,12 @@ export function Step5Target({ onNext, onBack }: Props) {
   const targetCarbsG = useAppStore((s) => s.targetCarbsG);
   const targetFatG = useAppStore((s) => s.targetFatG);
   const goal = useAppStore((s) => s.goal);
+  const completeOnboarding = useAppStore((s) => s.completeOnboarding);
+
+  const handleStartTracking = () => {
+    completeOnboarding();
+    onNext();
+  };
 
   // Fallback to sensible defaults if onboarding was skipped
   const calories = targetCalories || 1850;
@@ -128,7 +134,7 @@ export function Step5Target({ onNext, onBack }: Props) {
 
       {/* Sticky Bottom Sheet */}
       <div className="flex-shrink-0 bg-white rounded-t-[32px] px-4 sm:px-6 py-5 sm:py-6 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-        <Button fullWidth size="large" onClick={onNext} className="mb-4 !rounded-[24px]"
+        <Button fullWidth size="large" onClick={handleStartTracking} className="mb-4 !rounded-[24px]"
           rightIcon={<svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14M12 5l7 7-7 7"/></svg>}
         >
           Start Tracking
