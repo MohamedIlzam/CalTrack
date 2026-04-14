@@ -2,6 +2,7 @@
 
 import { Button } from "../ui/Button";
 import { useAppStore } from "@/store/useAppStore";
+import { useOnboardingDraft } from "./OnboardingFlow";
 
 interface Props {
   onNext: () => void;
@@ -15,14 +16,19 @@ const GOAL_LABEL: Record<string, string> = {
 };
 
 export function Step5Target({ onNext, onBack }: Props) {
-  const targetCalories = useAppStore((s) => s.targetCalories);
-  const targetProteinG = useAppStore((s) => s.targetProteinG);
-  const targetCarbsG = useAppStore((s) => s.targetCarbsG);
-  const targetFatG = useAppStore((s) => s.targetFatG);
-  const goal = useAppStore((s) => s.goal);
+  const { draft } = useOnboardingDraft();
+  
+  const targetCalories = draft.targetCalories;
+  const targetProteinG = draft.targetProteinG;
+  const targetCarbsG = draft.targetCarbsG;
+  const targetFatG = draft.targetFatG;
+  const goal = draft.goal || "lose";
+
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
+  const setOnboarding = useAppStore((s) => s.setOnboarding);
 
   const handleStartTracking = () => {
+    setOnboarding(draft);
     completeOnboarding();
     onNext();
   };

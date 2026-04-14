@@ -3,7 +3,8 @@
 import React, { useState } from "react";
 import { OnboardingShell } from "./OnboardingShell";
 import { BottomNavFooter } from "../ui/BottomNavFooter";
-import { useAppStore, type ActivityLevel } from "@/store/useAppStore";
+import { type ActivityLevel } from "@/store/useAppStore";
+import { useOnboardingDraft } from "./OnboardingFlow";
 
 interface Props {
   onNext: () => void;
@@ -56,12 +57,12 @@ const ACTIVITY_ID_MAP: Record<string, ActivityLevel> = {
 };
 
 export function Step3Activity({ onNext, onBack }: Props) {
-  const [selected, setSelected] = useState("lightly");
+  const { draft, updateDraft } = useOnboardingDraft();
+  const [selected, setSelected] = useState(draft.activityLevel || "lightly");
   const selectedData = activityLevels.find((a) => a.id === selected);
-  const weightKg = useAppStore((s) => s.weightKg);
-  const heightCm = useAppStore((s) => s.heightCm);
-  const goal = useAppStore((s) => s.goal);
-  const setOnboarding = useAppStore((s) => s.setOnboarding);
+  const weightKg = draft.weightKg || 0;
+  const heightCm = draft.heightCm || 0;
+  const goal = draft.goal || "lose";
 
   const handleNext = () => {
     const multiplier = ACTIVITY_MULTIPLIER[selected] ?? 1.375;
@@ -75,8 +76,8 @@ export function Step3Activity({ onNext, onBack }: Props) {
     const targetCarbsG = Math.round((targetCalories * 0.45) / 4);
     const targetFatG = Math.round((targetCalories * 0.30) / 9);
 
-    setOnboarding({
-      activityLevel: ACTIVITY_ID_MAP[selected],
+    updateDraft({
+      activityLevel: ACTIVITY_ID_MAP[selected] || "light",
       targetCalories,
       targetProteinG,
       targetCarbsG,
@@ -107,7 +108,7 @@ export function Step3Activity({ onNext, onBack }: Props) {
             return (
               <button
                 key={level.id}
-                onClick={() => setSelected(level.id)}
+                onClick={() => setSelected(level.id as ActivityLevel)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 transition-all duration-200 text-left ${
                   isSelected
                     ? "border-primary bg-primary-light"

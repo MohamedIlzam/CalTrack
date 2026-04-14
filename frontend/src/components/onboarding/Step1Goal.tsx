@@ -3,7 +3,8 @@
 import React, { useState } from "react";
 import { OnboardingShell } from "./OnboardingShell";
 import { BottomNavFooter } from "../ui/BottomNavFooter";
-import { useAppStore, type Goal } from "@/store/useAppStore";
+import type { Goal } from "@/store/useAppStore";
+import { useOnboardingDraft } from "./OnboardingFlow";
 
 interface Props {
   onNext: () => void;
@@ -41,11 +42,11 @@ const goals = [
 ];
 
 export function Step1Goal({ onNext, onBack }: Props) {
-  const [selected, setSelected] = useState("lose");
-  const setOnboarding = useAppStore((s) => s.setOnboarding);
+  const { draft, updateDraft } = useOnboardingDraft();
+  const [selected, setSelected] = useState(draft.goal || "lose");
 
   const handleNext = () => {
-    setOnboarding({ goal: selected as Goal });
+    updateDraft({ goal: selected as Goal });
     onNext();
   };
 
@@ -67,7 +68,7 @@ export function Step1Goal({ onNext, onBack }: Props) {
             return (
               <button
                 key={goal.id}
-                onClick={() => setSelected(goal.id)}
+                onClick={() => setSelected(goal.id as Goal)}
                 className={`w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 rounded-2xl transition-all duration-200 ${
                   isSelected
                     ? "bg-white border-[2.5px] border-[#006B5F] shadow-sm"

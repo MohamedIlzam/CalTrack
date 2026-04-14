@@ -4,7 +4,7 @@ import React, { useState, useMemo } from "react";
 import { OnboardingShell } from "./OnboardingShell";
 import { BottomNavFooter } from "../ui/BottomNavFooter";
 import { ProTipCard } from "../ui/ProTipCard";
-import { useAppStore } from "@/store/useAppStore";
+import { useOnboardingDraft } from "./OnboardingFlow";
 
 interface Props {
   onNext: () => void;
@@ -12,21 +12,21 @@ interface Props {
 }
 
 export function Step2BodyDetails({ onNext, onBack }: Props) {
-  const setOnboarding = useAppStore((s) => s.setOnboarding);
+  const { draft, updateDraft } = useOnboardingDraft();
 
-  const [name, setName] = useState<string>("");
+  const [name, setName] = useState<string>(draft.name || "");
   const [weightUnit, setWeightUnit] = useState<"kg" | "lbs">("kg");
   const [heightUnit, setHeightUnit] = useState<"cm" | "ft">("cm");
 
-  const [heightCm, setHeightCm] = useState<string>("");
+  const [heightCm, setHeightCm] = useState<string>(draft.heightCm ? String(draft.heightCm) : "");
   const [heightFt, setHeightFt] = useState<string>("");
   const [heightIn, setHeightIn] = useState<string>("");
 
-  const [weightVal, setWeightVal] = useState<string>("");
+  const [weightVal, setWeightVal] = useState<string>(draft.weightKg ? String(draft.weightKg) : "");
 
   // Target weight — tracks manual edits separately so auto-fill can override when height changes
-  const [targetWeightVal, setTargetWeightVal] = useState<string>("");
-  const [targetWeightEdited, setTargetWeightEdited] = useState(false);
+  const [targetWeightVal, setTargetWeightVal] = useState<string>(draft.targetWeightKg ? String(draft.targetWeightKg) : "");
+  const [targetWeightEdited, setTargetWeightEdited] = useState(!!draft.targetWeightKg);
 
   /* ── derived height in cm (shared) ── */
   const resolvedHeightCm = useMemo(() => {
@@ -113,9 +113,14 @@ export function Step2BodyDetails({ onNext, onBack }: Props) {
     const tKg = targetWeightEdited && targetWeightVal
       ? (weightUnit === "kg" ? parseFloat(targetWeightVal) : parseFloat(targetWeightVal) * 0.453592)
       : autoHealthyWeightKg;
-    if (wKg > 0 && resolvedHeightCm > 0) {
-      setOnboarding({ name, weightKg: wKg, targetWeightKg: tKg, heightCm: resolvedHeightCm });
-    }
+
+    // Always save the name. Only save numeric fields when they have real values.
+    updateDraft({
+      name,
+      ...(wKg > 0 ? { weightKg: wKg } : {}),
+      ...(resolvedHeightCm > 0 ? { heightCm: resolvedHeightCm } : {}),
+      ...(wKg > 0 && resolvedHeightCm > 0 ? { targetWeightKg: tKg } : {}),
+    });
     onNext();
   };
 
