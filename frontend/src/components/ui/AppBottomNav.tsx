@@ -24,13 +24,13 @@ export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
         <span className={`text-[10px] uppercase tracking-wide ${activeTab === 'search' ? 'font-bold' : 'font-medium'}`}>Search</span>
       </Link>
 
-      {/* floating Action Button Placeholder (Add) */}
+      {/* Floating Action Button */}
       <div className="relative w-[60px] flex justify-center">
-        <button className="absolute -top-[34px] w-[56px] h-[56px] rounded-full bg-[#001E1B] text-white flex items-center justify-center shadow-lg border-[4px] border-white">
+        <Link href="/search" className="absolute -top-[34px] w-[56px] h-[56px] rounded-full bg-[#001E1B] text-white flex items-center justify-center shadow-lg border-[4px] border-white active:scale-95 transition-transform">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
           </svg>
-        </button>
+        </Link>
       </div>
 
       {/* AI */}

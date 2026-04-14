@@ -32,7 +32,7 @@ export function OnboardingShell({
       {/* ── Fixed Top: Header + Stepper ── */}
       <div className="flex-shrink-0">
         {/* Header Bar — always in the same spot */}
-        <div className="flex items-center gap-2 px-5 pt-5 pb-2">
+        <div className="flex items-center gap-2 px-4 sm:px-5 pt-4 sm:pt-5 pb-2">
           {onBack ? (
             <button
               onClick={onBack}
@@ -53,7 +53,7 @@ export function OnboardingShell({
       </div>
 
       {/* ── Flexible Middle: Content ── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-6">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6">
         {children}
       </div>
 

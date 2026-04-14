@@ -63,7 +63,7 @@ export function Step4Food({ onNext, onBack }: Props) {
         {/* Large Card — Rice and Curry */}
         <button
           onClick={() => toggle("rice-curry")}
-          className={`relative w-full h-28 rounded-2xl overflow-hidden border-2 transition-all mb-2.5 ${
+          className={`relative w-full h-24 sm:h-28 rounded-2xl overflow-hidden border-2 transition-all mb-2.5 ${
             selectedIds.has("rice-curry") ? "border-primary" : "border-transparent"
           }`}
         >
@@ -88,7 +88,7 @@ export function Step4Food({ onNext, onBack }: Props) {
               <button
                 key={id}
                 onClick={() => toggle(id)}
-                className={`relative h-20 rounded-2xl overflow-hidden border-2 transition-all ${
+                className={`relative h-[72px] sm:h-20 rounded-2xl overflow-hidden border-2 transition-all ${
                   isSelected ? "border-primary bg-primary-light" : "border-gray-100 bg-gray-50"
                 }`}
               >

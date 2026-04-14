@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { OnboardingShell } from "./OnboardingShell";
 import { BottomNavFooter } from "../ui/BottomNavFooter";
+import { useAppStore, type ActivityLevel } from "@/store/useAppStore";
 
 interface Props {
   onNext: () => void;
@@ -40,16 +41,56 @@ const activityLevels = [
   },
 ];
 
+const ACTIVITY_MULTIPLIER: Record<string, number> = {
+  sedentary: 1.2,
+  lightly: 1.375,
+  moderately: 1.55,
+  very: 1.725,
+};
+
+const ACTIVITY_ID_MAP: Record<string, ActivityLevel> = {
+  sedentary: "sedentary",
+  lightly: "light",
+  moderately: "moderate",
+  very: "active",
+};
+
 export function Step3Activity({ onNext, onBack }: Props) {
   const [selected, setSelected] = useState("lightly");
   const selectedData = activityLevels.find((a) => a.id === selected);
+  const weightKg = useAppStore((s) => s.weightKg);
+  const heightCm = useAppStore((s) => s.heightCm);
+  const goal = useAppStore((s) => s.goal);
+  const setOnboarding = useAppStore((s) => s.setOnboarding);
+
+  const handleNext = () => {
+    const multiplier = ACTIVITY_MULTIPLIER[selected] ?? 1.375;
+    // Mifflin-St Jeor (gender-neutral midpoint: -78 offset)
+    const bmr = 10 * weightKg + 6.25 * heightCm - 78;
+    const tdee = Math.round(bmr * multiplier);
+    const targetCalories =
+      goal === "lose" ? tdee - 500 : goal === "gain" ? tdee + 300 : tdee;
+
+    const targetProteinG = Math.round((targetCalories * 0.25) / 4);
+    const targetCarbsG = Math.round((targetCalories * 0.45) / 4);
+    const targetFatG = Math.round((targetCalories * 0.30) / 9);
+
+    setOnboarding({
+      activityLevel: ACTIVITY_ID_MAP[selected],
+      targetCalories,
+      targetProteinG,
+      targetCarbsG,
+      targetFatG,
+    });
+    onNext();
+  };
 
   return (
     <OnboardingShell
       headerTitle="Activity Level"
       step={3}
       onBack={onBack}
-      footer={<BottomNavFooter onNext={onNext} onBack={onBack} />}
+      footer={<BottomNavFooter onNext={handleNext} onBack={onBack} />}
     >
       <div className="flex flex-col py-2">
         <h1 className="text-[1.75rem] font-bold text-gray-900 mb-1 tracking-tight">

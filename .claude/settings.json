@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install:*)",
+      "Bash(nest --version)",
+      "Read(//c/Users/lap.lk/AppData/Local/Temp/claude/c--Users-lap-lk-IdeaProjects-CalTrack/6e927aad-3f5e-4aa6-9275-bcd52eae6c62/tasks/**)",
+      "Bash(npx @nestjs/cli new backend --package-manager npm --skip-git --language TS)",
+      "Bash(exit 0)",
+      "Bash(npx prisma:*)",
+      "Bash(npx rimraf:*)",
+      "Bash(cmd //c \"rmdir /s /q node_modules\")",
+      "Bash(npm run:*)"
+    ]
+  }
+}

@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Goal {
+  LOSE
+  MAINTAIN
+  GAIN
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHT
+  MODERATE
+  ACTIVE
+}
+
+enum MealSlot {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACKS
+}
+
+// ─────────────────────────────────────────────
+// USER
+// Stores onboarding data and daily calorie targets.
+// ─────────────────────────────────────────────
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  name            String
+  passwordHash    String
+
+  // Body metrics
+  weightKg        Float?
+  targetWeightKg  Float?
+  heightCm        Float?
+
+  // Goals & activity
+  goal            Goal          @default(LOSE)
+  activityLevel   ActivityLevel @default(SEDENTARY)
+
+  // Computed targets (stored so the client can read them quickly)
+  targetCalories  Int?
+  targetProteinG  Int?
+  targetCarbsG    Int?
+  targetFatG      Int?
+
+  mealLogs        MealLog[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// FOOD ITEM
+// Master list of foods (Sri Lankan + generic).
+// ─────────────────────────────────────────────
+
+model FoodItem {
+  id          String  @id @default(uuid())
+  name        String
+  serving     String          // e.g. "1 piece", "100g"
+  kcal        Float
+  proteinG    Float
+  carbsG      Float
+  fatG        Float
+  isCustom    Boolean @default(false)  // true = user-created entry
+  createdById String?                  // null = system food
+
+  mealLogEntries MealLogEntry[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// MEAL LOG
+// One MealLog per user per day.
+// ─────────────────────────────────────────────
+
+model MealLog {
+  id      String   @id @default(uuid())
+  userId  String
+  date    DateTime @db.Date        // date only, no time component
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries MealLogEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])         // one log per user per day
+}
+
+// ─────────────────────────────────────────────
+// MEAL LOG ENTRY
+// Each food item added to a meal slot within a day's log.
+// ─────────────────────────────────────────────
+
+model MealLogEntry {
+  id         String   @id @default(uuid())
+  mealLogId  String
+  foodItemId String
+  meal       MealSlot
+  quantity   Float    @default(1)  // multiplier on the FoodItem serving
+
+  // Denormalised snapshot — preserves calorie values even if FoodItem changes
+  kcal       Float
+  proteinG   Float
+  carbsG     Float
+  fatG       Float
+
+  mealLog    MealLog  @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
+
+  createdAt  DateTime @default(now())
+}
