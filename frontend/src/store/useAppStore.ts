@@ -20,7 +20,7 @@ export interface FoodEntry {
 
 /* ─────────────── Onboarding slice ─────────────── */
 
-interface OnboardingState {
+export interface OnboardingState {
   hasOnboarded: boolean;
   name: string;
   goal: Goal;
