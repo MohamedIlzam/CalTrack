@@ -2,14 +2,14 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { CalorieCard } from "@/components/ui/CalorieCard";
 import {
   useAppStore,
   selectConsumedKcal,
-  selectEntriesByMeal,
-  selectKcalByMeal,
   type MealSlot,
+  type FoodEntry,
 } from "@/store/useAppStore";
 
 /* ─── Helpers ─── */
@@ -57,14 +57,15 @@ export default function HomePage() {
   const consumedProtein = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.protein, 0));
   const consumedFat = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.fat, 0));
 
-  const breakfastEntries = useAppStore(selectEntriesByMeal("breakfast"));
-  const lunchEntries = useAppStore(selectEntriesByMeal("lunch"));
-  const dinnerEntries = useAppStore(selectEntriesByMeal("dinner"));
-  const snacksEntries = useAppStore(selectEntriesByMeal("snacks"));
-  const breakfastKcal = useAppStore(selectKcalByMeal("breakfast"));
-  const lunchKcal = useAppStore(selectKcalByMeal("lunch"));
-  const dinnerKcal = useAppStore(selectKcalByMeal("dinner"));
-  const snacksKcal = useAppStore(selectKcalByMeal("snacks"));
+  /* useShallow prevents infinite loops — .filter() returns new array refs each call */
+  const breakfastEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "breakfast")));
+  const lunchEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "lunch")));
+  const dinnerEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "dinner")));
+  const snacksEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "snacks")));
+  const breakfastKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "breakfast").reduce((sum, e) => sum + e.kcal, 0));
+  const lunchKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "lunch").reduce((sum, e) => sum + e.kcal, 0));
+  const dinnerKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "dinner").reduce((sum, e) => sum + e.kcal, 0));
+  const snacksKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "snacks").reduce((sum, e) => sum + e.kcal, 0));
   const removeFoodEntry = useAppStore((s) => s.removeFoodEntry);
 
   const remaining = Math.max(0, targetCalories - consumed);
