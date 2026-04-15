@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { BuildCustomMealModal } from "./BuildCustomMealModal";
 
 interface AppBottomNavProps {
   activeTab?: "today" | "search" | "ai" | "progress";
@@ -92,11 +93,20 @@ function hitTestDial(clientX: number, clientY: number): string | null {
 }
 
 export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
-  const [isOpen,      setIsOpen]      = useState(false);
-  const [dragHoverId, setDragHoverId] = useState<string | null>(null);
-  const pointerStart  = useRef({ x: 0, y: 0 });
-  const hasDragged    = useRef(false);
-  const router        = useRouter();
+  const [isOpen,         setIsOpen]         = useState(false);
+  const [dragHoverId,    setDragHoverId]    = useState<string | null>(null);
+  const [showCreateMeal, setShowCreateMeal] = useState(false);
+  const pointerStart = useRef({ x: 0, y: 0 });
+  const hasDragged   = useRef(false);
+  const router       = useRouter();
+
+  // ── Shared dial action dispatcher ────────────────────────────────────────
+  function dispatchDialAction(id: string) {
+    setIsOpen(false);
+    if (id === "log")    { setShowCreateMeal(true); return; }
+    if (id === "ai")     { router.push("/ai");      return; }
+    // camera / scan: placeholder until those flows are built
+  }
 
   // ── FAB pointer handlers ─────────────────────────────────────────────────
   function onFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
@@ -123,11 +133,7 @@ export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
     if (hasDragged.current) {
       // Drag release: activate the item the finger lifted over (if any)
       const hitId = hitTestDial(e.clientX, e.clientY) ?? dragHoverId;
-      if (hitId) {
-        // TODO: dispatch action for hitId
-        console.log("[SpeedDial] selected via drag:", hitId);
-        setIsOpen(false);
-      }
+      if (hitId) dispatchDialAction(hitId);
       // No item hit → dial stays open; user can tap an item normally
     } else {
       // Plain tap → toggle open / close
@@ -144,6 +150,11 @@ export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
 
   return (
     <>
+      <BuildCustomMealModal
+        isOpen={showCreateMeal}
+        onClose={() => setShowCreateMeal(false)}
+      />
+
       {/* ── Scrim ──────────────────────────────────────────────────────────── */}
       <div
         aria-hidden
@@ -210,6 +221,7 @@ export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
               {/* Glassmorphic icon button */}
               <button
                 aria-label={item.label}
+                onClick={() => dispatchDialAction(item.id)}
                 className="flex items-center justify-center rounded-full active:scale-90
                   transition-all duration-150"
                 style={{
