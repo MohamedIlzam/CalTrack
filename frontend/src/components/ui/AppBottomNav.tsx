@@ -158,16 +158,14 @@ export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
         onClose={() => setShowCreateMeal(false)}
       />
 
-      {/* ── Scrim ──────────────────────────────────────────────────────────── */}
-      <div
-        aria-hidden
-        className="fixed inset-0 z-40 transition-all duration-300"
-        style={{
-          pointerEvents: isOpen ? "auto" : "none",
-          background: isOpen ? "rgba(0,0,0,0.25)" : "transparent",
-        }}
-        onClick={() => setIsOpen(false)}
-      />
+      {/* ── Tap-outside-to-close capture (invisible) ───────────────────────── */}
+      {isOpen && (
+        <div
+          aria-hidden
+          className="fixed inset-0 z-40"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
 
       {/* ── Bottom Nav ─────────────────────────────────────────────────────── */}
       <nav
