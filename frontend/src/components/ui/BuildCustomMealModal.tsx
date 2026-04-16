@@ -265,7 +265,7 @@ export function BuildCustomMealModal({ isOpen, onClose }: BuildCustomMealModalPr
       {/* Sheet — relative + overflow-hidden so the AI panel is clipped inside */}
       <div
         role="dialog" aria-modal="true" aria-label="Build Custom Meal"
-        className="fixed inset-x-0 bottom-0 z-[71] flex flex-col bg-[#F5F7F6] rounded-t-[28px] relative overflow-hidden"
+        className="fixed inset-x-0 bottom-0 z-[71] w-full max-w-md mx-auto flex flex-col bg-[#F5F7F6] rounded-t-[28px] overflow-hidden"
         style={{
           height: "calc(100dvh - 36px)",
           transform: isOpen ? "translateY(0)" : "translateY(105%)",
@@ -469,7 +469,7 @@ export function BuildCustomMealModal({ isOpen, onClose }: BuildCustomMealModalPr
             className="w-full py-[15px] rounded-[20px] text-white text-[16px] font-bold tracking-wide shadow-lg transition-all duration-200"
             style={{ background: plateItems.length === 0 ? "#BACAC5" : "#006B5F" }}
           >
-            {plateItems.length === 0 ? "Add ingredients to save" : "Save Meal"}
+            {plateItems.length === 0 ? "Save" : "Save Meal"}
           </button>
         </div>
 
