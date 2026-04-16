@@ -19,9 +19,10 @@ const HALF               = ITEM_SIZE / 2;
 const DRAG_THRESHOLD     = 12;   // px movement before drag mode kicks in
 
 const DIAL_ITEMS = [
+  // Left-most → 143°
   {
-    id: "camera",
-    label: "Camera",
+    id: "capture",
+    label: "Capture",
     angleDeg: 143,
     icon: (
       <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -31,10 +32,24 @@ const DIAL_ITEMS = [
       </svg>
     ),
   },
+  // 108°
+  {
+    id: "text",
+    label: "Text",
+    angleDeg: 108,
+    icon: (
+      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+      </svg>
+    ),
+  },
+  // 72°
   {
     id: "scan",
     label: "Scan",
-    angleDeg: 108,
+    angleDeg: 72,
     icon: (
       <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -49,10 +64,11 @@ const DIAL_ITEMS = [
       </svg>
     ),
   },
+  // Right-most → 37°
   {
     id: "log",
-    label: "Create food",
-    angleDeg: 72,
+    label: "Create Food",
+    angleDeg: 37,
     icon: (
       <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -60,19 +76,6 @@ const DIAL_ITEMS = [
         <path d="M12 5c0-1.2.8-2.2 2-2.5" />
         <line x1="12" y1="17" x2="12" y2="21" />
         <line x1="10" y1="19" x2="14" y2="19" />
-      </svg>
-    ),
-  },
-  {
-    id: "ai",
-    label: "AI Coach",
-    angleDeg: 37,
-    icon: (
-      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
-        <path d="M5 3l.6 1.8L7.4 5l-1.8.6L5 7.4l-.6-1.8L2.6 5l1.8-.6z" />
-        <path d="M19.5 15l.4 1.2 1.2.4-1.2.4-.4 1.2-.4-1.2-1.2-.4 1.2-.4z" />
       </svg>
     ),
   },
@@ -162,8 +165,6 @@ export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
         style={{
           pointerEvents: isOpen ? "auto" : "none",
           background: isOpen ? "rgba(0,0,0,0.25)" : "transparent",
-          backdropFilter: isOpen ? "blur(2px)" : "none",
-          WebkitBackdropFilter: isOpen ? "blur(2px)" : "none",
         }}
         onClick={() => setIsOpen(false)}
       />
