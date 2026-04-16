@@ -10,7 +10,8 @@
       "Bash(npx prisma:*)",
       "Bash(npx rimraf:*)",
       "Bash(cmd //c \"rmdir /s /q node_modules\")",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
