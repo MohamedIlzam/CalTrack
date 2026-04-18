@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { BuildCustomMealModal } from "./BuildCustomMealModal";
+
 
 interface AppBottomNavProps {
   activeTab?: "today" | "search" | "ai" | "progress";
@@ -19,11 +19,11 @@ const HALF               = ITEM_SIZE / 2;
 const DRAG_THRESHOLD     = 12;   // px movement before drag mode kicks in
 
 const DIAL_ITEMS = [
-  // Left-most → 143°
+  // Left → 135°
   {
     id: "capture",
     label: "Capture",
-    angleDeg: 143,
+    angleDeg: 135,
     icon: (
       <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -32,11 +32,11 @@ const DIAL_ITEMS = [
       </svg>
     ),
   },
-  // 108°
+  // Centre → 90°
   {
     id: "text",
     label: "Text",
-    angleDeg: 108,
+    angleDeg: 90,
     icon: (
       <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -45,11 +45,11 @@ const DIAL_ITEMS = [
       </svg>
     ),
   },
-  // 72°
+  // Right → 45°
   {
     id: "scan",
     label: "Scan",
-    angleDeg: 72,
+    angleDeg: 45,
     icon: (
       <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -64,21 +64,7 @@ const DIAL_ITEMS = [
       </svg>
     ),
   },
-  // Right-most → 37°
-  {
-    id: "log",
-    label: "Create Food",
-    angleDeg: 37,
-    icon: (
-      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 5C8.69 5 6 7.69 6 11s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z" />
-        <path d="M12 5c0-1.2.8-2.2 2-2.5" />
-        <line x1="12" y1="17" x2="12" y2="21" />
-        <line x1="10" y1="19" x2="14" y2="19" />
-      </svg>
-    ),
-  },
+
 ];
 
 // ─── Viewport hit-test ───────────────────────────────────────────────────────
@@ -98,7 +84,7 @@ function hitTestDial(clientX: number, clientY: number): string | null {
 export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
   const [isOpen,         setIsOpen]         = useState(false);
   const [dragHoverId,    setDragHoverId]    = useState<string | null>(null);
-  const [showCreateMeal, setShowCreateMeal] = useState(false);
+
   const pointerStart = useRef({ x: 0, y: 0 });
   const hasDragged   = useRef(false);
   const router       = useRouter();
@@ -106,7 +92,7 @@ export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
   // ── Shared dial action dispatcher ────────────────────────────────────────
   function dispatchDialAction(id: string) {
     setIsOpen(false);
-    if (id === "log")    { setShowCreateMeal(true); return; }
+
     if (id === "ai")     { router.push("/ai");      return; }
     // camera / scan: placeholder until those flows are built
   }
@@ -153,10 +139,7 @@ export function AppBottomNav({ activeTab = "today" }: AppBottomNavProps) {
 
   return (
     <>
-      <BuildCustomMealModal
-        isOpen={showCreateMeal}
-        onClose={() => setShowCreateMeal(false)}
-      />
+
 
       {/* ── Tap-outside-to-close capture (invisible) ───────────────────────── */}
       {isOpen && (
