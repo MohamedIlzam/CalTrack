@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 
 export type Goal = "lose" | "maintain" | "gain";
 export type ActivityLevel = "sedentary" | "light" | "moderate" | "active";
-export type MealSlot = "breakfast" | "lunch" | "dinner" | "snacks";
+export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack" | "snacks" | "saved_meals";
 
 export interface FoodEntry {
   id: string;

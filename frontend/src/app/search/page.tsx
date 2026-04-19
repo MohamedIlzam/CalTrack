@@ -63,6 +63,7 @@ const MEAL_LABELS: Record<string, { label: string; emoji: string }> = {
   lunch:    { label: "Lunch",     emoji: "☀️" },
   dinner:   { label: "Dinner",    emoji: "🌙" },
   snack:    { label: "Snack",     emoji: "🍪" },
+  saved_meals: { label: "Save as Meal", emoji: "❤️" },
 };
 
 // ─── Mock AI ingredient generator ─────────────────────────────────────────────
@@ -178,10 +179,11 @@ function SearchContent() {
   }, [aiMessages, aiThinking]);
 
   // ── Search / filter ──────────────────────────────────────────────────────────
-  const displayedFoods = searchQuery.trim()
-    ? FOOD_DB.filter((f) => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : activeCategory === "All"
-      ? FOOD_DB
+  const isDefaultEmpty = !searchQuery.trim() && activeCategory === "All";
+  const displayedFoods = isDefaultEmpty
+    ? []
+    : searchQuery.trim()
+      ? FOOD_DB.filter((f) => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : FOOD_DB.filter((f) => f.category === activeCategory);
 
   // ── Plate helpers ────────────────────────────────────────────────────────────
@@ -271,7 +273,7 @@ function SearchContent() {
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className={`min-h-screen bg-[#F9F9F9] font-sans antialiased ${plateItems.length > 0 ? "pb-[240px]" : "pb-[100px]"}`}>
+    <div className={`min-h-screen bg-[#F9F9F9] font-sans antialiased ${plateItems.length > 0 ? "pb-[380px]" : "pb-[100px]"}`}>
 
       {/* ── Top Bar ────────────────────────────────────────────────────────────── */}
       <header className="fixed top-0 left-0 right-0 z-40 w-full px-6 py-4 bg-white/80 backdrop-blur-xl flex justify-between items-center border-b border-gray-100/50">
@@ -414,168 +416,193 @@ function SearchContent() {
             </div>
           ) : (
             /* ── Empty State + AI CTA ─────────────────────────────────────────── */
-            <div className="flex flex-col items-center py-10 gap-4">
-              <div className="w-16 h-16 rounded-full bg-[#006B5F]/10 flex items-center justify-center">
-                <span className="text-[32px]">🍽️</span>
+            isDefaultEmpty ? (
+              <div className="flex flex-col items-center py-10 gap-4 mt-8">
+                <div className="w-16 h-16 rounded-full bg-[#006B5F]/10 flex items-center justify-center">
+                  <span className="text-[32px]">🥗</span>
+                </div>
+                <div className="text-center">
+                  <p className="text-[16px] font-extrabold text-[#1A1C1C]">
+                    What are you having?
+                  </p>
+                  <p className="text-[13px] text-[#3C4A46]/70 mt-1 max-w-[260px]">
+                    Search for a food, pick a category, or create a custom entry with AI!
+                  </p>
+                </div>
+                <button
+                  onClick={openAiPanel}
+                  className="mt-2 flex items-center gap-2 px-6 py-3 rounded-full text-white text-[14px] font-bold shadow-lg active:scale-95 transition-all"
+                  style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
+                    <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
+                  </svg>
+                  Create with AI
+                </button>
               </div>
-              <div className="text-center">
-                <p className="text-[15px] font-bold text-[#1A1C1C]">
-                  No foods found for &ldquo;{searchQuery}&rdquo;
-                </p>
-                <p className="text-[13px] text-[#3C4A46]/70 mt-1">
-                  Can&apos;t find it? Create your own with AI!
-                </p>
+            ) : (
+              <div className="flex flex-col items-center py-10 gap-4 mt-4">
+                <div className="w-16 h-16 rounded-full bg-[#006B5F]/10 flex items-center justify-center">
+                  <span className="text-[32px]">🍽️</span>
+                </div>
+                <div className="text-center">
+                  <p className="text-[15px] font-bold text-[#1A1C1C]">
+                    No foods found for &ldquo;{searchQuery}&rdquo;
+                  </p>
+                  <p className="text-[13px] text-[#3C4A46]/70 mt-1">
+                    Can&apos;t find it? Create your own with AI!
+                  </p>
+                </div>
+                <button
+                  onClick={openAiPanel}
+                  className="flex items-center gap-2 px-6 py-3 rounded-full text-white text-[14px] font-bold shadow-lg active:scale-95 transition-all"
+                  style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
+                    <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
+                  </svg>
+                  Create with AI
+                </button>
               </div>
-              <button
-                onClick={openAiPanel}
-                className="flex items-center gap-2 px-6 py-3 rounded-full text-white text-[14px] font-bold shadow-lg active:scale-95 transition-all"
-                style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
-                  <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
-                </svg>
-                Create with AI
-              </button>
-            </div>
+            )
           )}
         </section>
 
         {/* ── Plate Section ─────────────────────────────────────────────────────── */}
-        {plateItems.length > 0 && (
-          <>
-            {/* Total Vitality */}
-            <div
-              className="rounded-[22px] p-4 relative overflow-hidden"
-              style={{ background: "linear-gradient(135deg, #005548 0%, #00897B 50%, #2DD4BF 100%)" }}
+        <div className="h-4" />
+      </main>
+
+      {/* ── Floating AI Button (Only shown when no items logic) ───────────────── */}
+      {plateItems.length === 0 && (
+        <button
+          id="ai-ingredient-button"
+          aria-label="AI Ingredient Assistant"
+          onClick={openAiPanel}
+          className="fixed z-30 w-[48px] h-[48px] rounded-full flex items-center justify-center shadow-xl transition-all active:scale-90"
+          style={{
+            bottom: 100,
+            right: 24,
+            background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)",
+            boxShadow: "0 4px 20px rgba(0,107,95,0.40), 0 0 0 3px rgba(255,255,255,0.9)",
+          }}
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor"
+            viewBox="0 0 24 24" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
+            <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
+            <path d="M19 15l.4 1.2 1.2.4-1.2.4-.4 1.2-.4-1.2-1.2-.4 1.2-.4z" />
+          </svg>
+        </button>
+      )}
+
+      {/* ── Condensed Vitality & Save Panel ─────────────────────────────────────── */}
+      {plateItems.length > 0 && (
+        <div className="fixed bottom-[80px] left-0 right-0 z-20 pointer-events-none pb-4 pt-10 transition-all duration-300">
+          <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-[#F9F9F9] via-[#F9F9F9] to-transparent opacity-95" />
+          <div className="relative max-w-screen-xl mx-auto px-4 flex flex-col gap-[14px] pointer-events-auto">
+            
+            {/* Total Vitality Card (Transparent when app is scrolled to see map/content) */}
+            <div 
+              className="flex-none shadow-[0_10px_40px_rgba(0,107,95,0.2)] transition-opacity duration-300 rounded-[26px] p-4 flex gap-[14px] overflow-hidden relative"
+              style={{ opacity: isScrolled ? 0.85 : 1, background: "linear-gradient(135deg, rgba(0,68,57,0.95) 0%, rgba(0,121,107,0.95) 50%, rgba(20,184,166,0.92) 100%)", backdropFilter: "blur(12px)" }}
             >
-              <div className="absolute top-4 right-4 w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center">
-                <svg className="w-[18px] h-[18px] text-white" fill="none" stroke="currentColor"
-                  viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2" />
-                  <path d="M7 2v20" />
-                  <path d="M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3zm0 0v7" />
-                </svg>
+              {/* Left Side: Stats */}
+              <div className="w-[42%] flex flex-col justify-center border-r border-white/20 pr-3 relative">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/60 mb-1 leading-none">Total</p>
+                  <p className="text-[36px] font-extrabold text-white tracking-[-1px] leading-none flex items-baseline gap-[2px]">
+                    {totalKcal}<span className="text-[15px] font-semibold opacity-75">kcal</span>
+                  </p>
+                </div>
+                <div className="flex justify-between mt-4 pr-1">
+                  {[{ label: "P", val: totalProtein }, { label: "C", val: totalCarbs }, { label: "F", val: totalFat }].map(({ label, val }) => (
+                    <div key={label} className="flex flex-col items-start gap-[1px]">
+                      <p className="text-[9px] font-bold text-white/50 leading-none">{label}</p>
+                      <p className="text-[13px] font-extrabold text-white leading-none">
+                        {val}<span className="text-[9px] font-normal opacity-75 ml-[1px]">g</span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/60 mb-1">Total Vitality</p>
-              <p className="text-[38px] font-extrabold text-white tracking-[-1px] leading-none">
-                {totalKcal}<span className="text-[18px] font-semibold opacity-75 ml-1">kcal</span>
-              </p>
-              <div className="flex gap-5 mt-3 pt-3 border-t border-white/20">
-                {[{ label: "Protein", val: totalProtein }, { label: "Carbs", val: totalCarbs }, { label: "Fats", val: totalFat }].map(({ label, val }) => (
-                  <div key={label}>
-                    <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-white/55">{label}</p>
-                    <p className="text-[15px] font-extrabold text-white leading-tight">
-                      {val}<span className="text-[11px] font-semibold opacity-75">g</span>
-                    </p>
+
+              {/* Right Side: Plate Items (Scrollable) */}
+              <div className="w-[58%] flex flex-col gap-[6px] max-h-[125px] overflow-y-auto no-scrollbar pl-1">
+                {plateItems.map((item) => (
+                  <div key={item.id} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px]" style={{ background: "rgba(255,255,255,0.12)" }}>
+                    <span className="text-[18px] leading-none">{item.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-bold text-white truncate leading-tight">{item.name}</p>
+                      <p className="text-[10px] text-white/60 truncate mt-[1px] tracking-wide">{item.qty} {item.qty === 1 ? 'srv' : 'srvs'}</p>
+                    </div>
+                    {/* Tiny Stepper */}
+                    <div className="flex items-center gap-1 bg-black/20 rounded-full px-1 py-1">
+                      <button onClick={() => handleDecrease(item)} className="px-1.5 active:opacity-50">
+                        <svg className="w-[9px] h-[9px] text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" d="M5 12h14" /></svg>
+                      </button>
+                      <span className="text-[11px] font-bold text-white min-w-[12px] text-center leading-none tabular-nums select-none mb-[1px]">{item.qty}</span>
+                      <button onClick={() => handleIncrease(item)} className="px-1.5 active:opacity-50">
+                        <svg className="w-[9px] h-[9px] text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* The Plate */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-[16px] font-extrabold text-[#1A1C1C]">Your Plate</h2>
-                <span className="text-[11px] font-bold text-[#006B5F] bg-[#E6F7F5] rounded-full px-3 py-[3px]">
-                  {plateItems.length} {plateItems.length === 1 ? "Item" : "Items"}
-                </span>
+            {/* Save Bar Options */}
+            <div className="flex-none pt-1 shrink-0">
+              <div className="flex gap-2 mb-[14px] overflow-x-auto no-scrollbar">
+                {(["breakfast", "lunch", "dinner", "snack", "saved_meals"] as MealSlot[]).map((slot) => (
+                  <button
+                    key={slot}
+                    onClick={() => setSelectedMeal(slot)}
+                    className={`flex-none flex items-center gap-1.5 px-4 py-2.5 rounded-full text-[13px] font-bold transition-all active:scale-95 shadow-sm border ${
+                      selectedMeal === slot
+                        ? "bg-[#006B5F] text-white border-transparent"
+                        : "bg-white text-[#3C4A46] border-gray-200"
+                    }`}
+                  >
+                    <span className="text-[15px]">{MEAL_LABELS[slot].emoji}</span>
+                    {MEAL_LABELS[slot].label}
+                  </button>
+                ))}
               </div>
-              <div className="space-y-[10px]">
-                {plateItems.map((item) => {
-                  const kcal = Math.round(item.kcalPerServing * item.qty);
-                  const label = item.qty === 1 ? "1 serving" : `${item.qty} servings`;
-                  return (
-                    <div key={item.id}
-                      className="bg-white rounded-[18px] p-3 flex items-center gap-3 shadow-sm border border-[#BACAC5]/15">
-                      <div
-                        className="w-[50px] h-[50px] rounded-[13px] flex-shrink-0 flex items-center justify-center text-[24px] select-none"
-                        style={{ background: item.chipColor + "22" }}
-                      >
-                        {item.emoji}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-bold text-[#1A1C1C] leading-tight truncate">{item.name}</p>
-                        <p className="text-[12px] text-[#3C4A46] mt-[1px]">{label} &bull; {kcal} kcal</p>
-                        <p className="text-[10px] text-gray-400 mt-[2px]">
-                          P&nbsp;<span className="font-semibold text-[#3C4A46]">{Math.round(item.proteinPerServing * item.qty)}g</span>
-                          &nbsp;&nbsp;C&nbsp;<span className="font-semibold text-[#3C4A46]">{Math.round(item.carbsPerServing * item.qty)}g</span>
-                          &nbsp;&nbsp;F&nbsp;<span className="font-semibold text-[#3C4A46]">{Math.round(item.fatPerServing * item.qty)}g</span>
-                        </p>
-                      </div>
-                      <Stepper qty={item.qty} onIncrease={() => handleIncrease(item)} onDecrease={() => handleDecrease(item)} />
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          </>
-        )}
 
-        <div className="h-4" />
-      </main>
-
-      {/* ── Floating AI Button ──────────────────────────────────────────────────── */}
-      <button
-        id="ai-ingredient-button"
-        aria-label="AI Ingredient Assistant"
-        onClick={openAiPanel}
-        className="fixed z-30 w-[48px] h-[48px] rounded-full flex items-center justify-center shadow-xl transition-all active:scale-90"
-        style={{
-          bottom: plateItems.length > 0 ? 250 : 100,
-          right: 24,
-          background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)",
-          boxShadow: "0 4px 20px rgba(0,107,95,0.40), 0 0 0 3px rgba(255,255,255,0.9)",
-        }}
-      >
-        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor"
-          viewBox="0 0 24 24" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
-          <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
-          <path d="M19 15l.4 1.2 1.2.4-1.2.4-.4 1.2-.4-1.2-1.2-.4 1.2-.4z" />
-        </svg>
-      </button>
-
-      {/* ── Save Bar (sticky above bottom nav) ──────────────────────────────────── */}
-      {plateItems.length > 0 && (
-        <div
-          className="fixed bottom-[80px] left-0 right-0 z-30 px-4 pt-3 pb-4"
-          style={{ background: "linear-gradient(to top, #F9F9F9 80%, transparent)" }}
-        >
-          <div className="max-w-screen-xl mx-auto">
-            {/* Meal Slot Selector */}
-            <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
-              {(["breakfast", "lunch", "dinner", "snack"] as MealSlot[]).map((slot) => (
+              <div className="flex gap-2 items-center w-full">
                 <button
-                  key={slot}
-                  onClick={() => setSelectedMeal(slot)}
-                  className={`flex-none flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold transition-all active:scale-95 ${
-                    selectedMeal === slot
-                      ? "bg-[#006B5F] text-white shadow-md"
-                      : "bg-white text-[#3C4A46] border border-gray-100 shadow-sm"
-                  }`}
+                  id="save-meal-button"
+                  onClick={handleSaveMeal}
+                  className="flex-1 py-[16px] rounded-[22px] text-white text-[15px] font-bold tracking-wide shadow-[0_8px_20px_rgba(0,107,95,0.25)] transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+                  style={{ background: "#006B5F" }}
                 >
-                  <span>{MEAL_LABELS[slot].emoji}</span>
-                  {MEAL_LABELS[slot].label}
+                  <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save {plateItems.length} {plateItems.length === 1 ? "item" : "items"}
                 </button>
-              ))}
+                <button
+                  id="ai-ingredient-button-inline"
+                  aria-label="AI Ingredient Assistant"
+                  onClick={openAiPanel}
+                  className="w-[56px] h-[56px] flex-none rounded-[22px] flex items-center justify-center shadow-[0_8px_20px_rgba(0,107,95,0.25)] transition-all active:scale-95"
+                  style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
+                >
+                  <svg className="w-[24px] h-[24px] text-white" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
+                    <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
+                    <path d="M19 15l.4 1.2 1.2.4-1.2.4-.4 1.2-.4-1.2-1.2-.4 1.2-.4z" />
+                  </svg>
+                </button>
+              </div>
             </div>
-
-            {/* Save Button */}
-            <button
-              id="save-meal-button"
-              onClick={handleSaveMeal}
-              className="w-full py-[15px] rounded-[20px] text-white text-[15px] font-bold tracking-wide shadow-lg transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
-              style={{ background: "#006B5F" }}
-            >
-              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 13l4 4L19 7" />
-              </svg>
-              Save {plateItems.length} {plateItems.length === 1 ? "item" : "items"} to {MEAL_LABELS[selectedMeal].label}
-              <span className="text-white/70 font-semibold ml-1">&bull; {totalKcal} kcal</span>
-            </button>
+            
           </div>
         </div>
       )}
