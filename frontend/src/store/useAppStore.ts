@@ -7,6 +7,12 @@ export type Goal = "lose" | "maintain" | "gain";
 export type ActivityLevel = "sedentary" | "light" | "moderate" | "active";
 export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack" | "snacks" | "saved_meals";
 
+export interface SubIngredient {
+  id: string;
+  name: string;
+  qty: number;
+}
+
 export interface FoodEntry {
   id: string;
   name: string;
@@ -16,6 +22,7 @@ export interface FoodEntry {
   fat: number;     // grams
   serving: string; // e.g. "1 piece", "2 tbsp"
   meal: MealSlot;
+  ingredients?: SubIngredient[];
 }
 
 /* ─────────────── Onboarding slice ─────────────── */

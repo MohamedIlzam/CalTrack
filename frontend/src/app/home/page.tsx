@@ -68,8 +68,10 @@ export default function HomePage() {
   const dinnerKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "dinner").reduce((sum, e) => sum + e.kcal, 0));
   const snacksKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "snacks" || e.meal === "snack").reduce((sum, e) => sum + e.kcal, 0));
   const removeFoodEntry = useAppStore((s) => s.removeFoodEntry);
+  const addFoodEntry = useAppStore((s) => s.addFoodEntry);
 
   const [showSavedMeals, setShowSavedMeals] = useState(false);
+  const [expandedMealId, setExpandedMealId] = useState<string | null>(null);
 
   const remaining = Math.max(0, targetCalories - consumed);
   const progress = targetCalories > 0 ? consumed / targetCalories : 0;
@@ -243,30 +245,68 @@ export default function HomePage() {
               <div className="bg-white rounded-[16px] shadow-sm p-4 flex flex-col gap-0 border border-[#EEEEEE]/50">
                 {savedMealsEntries.map((entry, i) => (
                   <div key={entry.id}>
-                    <div className="flex items-center justify-between py-1">
+                    <div 
+                      className="flex items-center justify-between py-2 cursor-pointer active:scale-[0.98] transition-transform"
+                      onClick={() => setExpandedMealId(expandedMealId === entry.id ? null : entry.id)}
+                    >
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-[#F3F3F3] rounded-xl overflow-hidden flex items-center justify-center text-xl">
                           ❤️
                         </div>
                         <div>
                           <p className="text-[14px] font-bold text-[#1A1C1C]">{entry.name}</p>
-                          <p className="text-[12px] font-medium text-[#3C4A46]">{entry.serving}</p>
+                          <p className="text-[12px] font-medium text-[#3C4A46]">{entry.kcal} kcal • {entry.serving}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[14px] font-bold text-[#3C4A46]">{entry.kcal}</span>
                         <button
-                          onClick={() => removeFoodEntry(entry.id)}
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-[#3C4A46]/30 hover:text-red-400 hover:bg-red-50 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); removeFoodEntry(entry.id); }}
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-[#3C4A46]/30 hover:text-red-400 hover:bg-red-50 transition-colors"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
                       </div>
                     </div>
+                    
+                    {/* EXPANDED VIEW */}
+                    {expandedMealId === entry.id && (
+                      <div className="pl-[60px] pb-3 pr-2 animate-in slide-in-from-top-2 duration-200">
+                        {entry.ingredients && entry.ingredients.length > 0 && (
+                          <div className="mb-3 border-l-2 border-[#006B5F]/20 pl-3 py-1">
+                            {entry.ingredients.map((ing, idx) => (
+                              <p key={idx} className="text-[12px] text-[#3C4A46]/80 flex justify-between py-0.5">
+                                <span>{ing.name}</span>
+                                <span className="font-medium">x{ing.qty}</span>
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        
+                        <div className="flex flex-wrap gap-2">
+                          {(["breakfast", "lunch", "dinner", "snack"] as MealSlot[]).map((slot) => (
+                            <button
+                              key={slot}
+                              onClick={() => {
+                                addFoodEntry({
+                                  ...entry,
+                                  id: `log-${Date.now()}-${Math.random()}`,
+                                  meal: slot
+                                });
+                                setExpandedMealId(null);
+                              }}
+                              className="px-3 py-1.5 rounded-full bg-[#006B5F]/10 text-[#006B5F] text-[11px] font-bold uppercase tracking-wider active:scale-95 transition-transform"
+                            >
+                              + {slot}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {i < savedMealsEntries.length - 1 && (
-                      <div className="border-t border-[#EEEEEE] my-2" />
+                      <div className="border-t border-[#EEEEEE] my-1" />
                     )}
                   </div>
                 ))}

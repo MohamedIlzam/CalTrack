@@ -148,6 +148,7 @@ function SearchContent() {
   // ── Plate state ──────────────────────────────────────────────────────────────
   const [plateItems, setPlateItems] = useState<PlateItem[]>([]);
   const [selectedMeal, setSelectedMeal] = useState<MealSlot>(paramMeal);
+  const [savedMealName, setSavedMealName] = useState("");
 
   // ── AI state ─────────────────────────────────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false);
@@ -214,6 +215,30 @@ function SearchContent() {
 
   // ── Save meal ────────────────────────────────────────────────────────────────
   function handleSaveMeal() {
+    if (selectedMeal === "saved_meals") {
+      if (!savedMealName.trim()) {
+        document.getElementById("savedMealNameInput")?.focus();
+        return;
+      }
+      addFoodEntry({
+        id: `saved-${Date.now()}-${Math.random()}`,
+        meal: selectedMeal,
+        name: savedMealName.trim(),
+        kcal: totalKcal,
+        carbs: totalCarbs,
+        protein: totalProtein,
+        fat: totalFat,
+        serving: `${plateItems.length} items`,
+        ingredients: plateItems.map(item => ({
+          id: item.id,
+          name: item.name,
+          qty: item.qty
+        }))
+      });
+      router.push("/home");
+      return;
+    }
+
     plateItems.forEach((item) => {
       addFoodEntry({
         id: `${Date.now()}-${Math.random()}-${item.id}`,
@@ -572,6 +597,19 @@ function SearchContent() {
                   </button>
                 ))}
               </div>
+
+              {selectedMeal === "saved_meals" && (
+                <div className="mb-[14px]">
+                  <input
+                    id="savedMealNameInput"
+                    type="text"
+                    placeholder="Enter a name for this Custom Meal"
+                    value={savedMealName}
+                    onChange={(e) => setSavedMealName(e.target.value)}
+                    className="w-full h-[46px] rounded-[18px] border border-[#BACAC5]/40 px-4 text-[14px] text-[#1A1C1C] outline-none focus:border-[#006B5F] focus:ring-1 focus:ring-[#006B5F]/20 transition-all shadow-inner"
+                  />
+                </div>
+              )}
 
               <div className="flex gap-2 items-center w-full">
                 <button
