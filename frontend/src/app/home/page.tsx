@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
@@ -53,20 +53,23 @@ export default function HomePage() {
   const targetProteinG = useAppStore((s) => s.targetProteinG) || 120;
   const targetFatG = useAppStore((s) => s.targetFatG) || 65;
   const consumed = useAppStore(selectConsumedKcal);
-  const consumedCarbs = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.carbs, 0));
-  const consumedProtein = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.protein, 0));
-  const consumedFat = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.fat, 0));
+  const consumedCarbs = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.carbs, 0));
+  const consumedProtein = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.protein, 0));
+  const consumedFat = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.fat, 0));
 
   /* useShallow prevents infinite loops — .filter() returns new array refs each call */
   const breakfastEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "breakfast")));
   const lunchEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "lunch")));
   const dinnerEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "dinner")));
-  const snacksEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "snacks")));
+  const snacksEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "snacks" || e.meal === "snack")));
+  const savedMealsEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "saved_meals")));
   const breakfastKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "breakfast").reduce((sum, e) => sum + e.kcal, 0));
   const lunchKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "lunch").reduce((sum, e) => sum + e.kcal, 0));
   const dinnerKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "dinner").reduce((sum, e) => sum + e.kcal, 0));
-  const snacksKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "snacks").reduce((sum, e) => sum + e.kcal, 0));
+  const snacksKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "snacks" || e.meal === "snack").reduce((sum, e) => sum + e.kcal, 0));
   const removeFoodEntry = useAppStore((s) => s.removeFoodEntry);
+
+  const [showSavedMeals, setShowSavedMeals] = useState(false);
 
   const remaining = Math.max(0, targetCalories - consumed);
   const progress = targetCalories > 0 ? consumed / targetCalories : 0;
@@ -210,8 +213,11 @@ export default function HomePage() {
               </span>
             </button>
 
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-[#E8E8E8]/40 rounded-[12px] whitespace-nowrap">
-              <svg className="w-[18px] h-[18px] text-[#006B5F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button 
+              onClick={() => setShowSavedMeals(!showSavedMeals)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-[12px] whitespace-nowrap transition-colors ${showSavedMeals ? "bg-[#006B5F]/10" : "bg-[#E8E8E8]/40"}`}
+            >
+              <svg className={`w-[18px] h-[18px] ${showSavedMeals ? "text-[#006B5F]" : "text-[#006B5F]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
               <span className="text-[14px] font-semibold text-[#1A1C1C]">
@@ -220,6 +226,59 @@ export default function HomePage() {
             </button>
           </div>
         </div>
+
+        {/* ─── Saved Meals Section ─── */}
+        {showSavedMeals && (
+          <div className="mb-2">
+            <div className="flex justify-between items-end mb-3">
+              <h3 className="text-[20px] font-extrabold text-[#1A1C1C] tracking-[-0.5px]">
+                Saved Meals
+              </h3>
+              <span className={`text-[12px] font-bold uppercase tracking-[1.2px] mb-0.5 ${savedMealsEntries.length > 0 ? "text-[#006B5F]" : "text-[#3C4A46]/40"}`}>
+                {savedMealsEntries.length > 0 ? `${savedMealsEntries.length} COMBOS` : "EMPTY"}
+              </span>
+            </div>
+            
+            {savedMealsEntries.length > 0 ? (
+              <div className="bg-white rounded-[16px] shadow-sm p-4 flex flex-col gap-0 border border-[#EEEEEE]/50">
+                {savedMealsEntries.map((entry, i) => (
+                  <div key={entry.id}>
+                    <div className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-[#F3F3F3] rounded-xl overflow-hidden flex items-center justify-center text-xl">
+                          ❤️
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-bold text-[#1A1C1C]">{entry.name}</p>
+                          <p className="text-[12px] font-medium text-[#3C4A46]">{entry.serving}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[14px] font-bold text-[#3C4A46]">{entry.kcal}</span>
+                        <button
+                          onClick={() => removeFoodEntry(entry.id)}
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-[#3C4A46]/30 hover:text-red-400 hover:bg-red-50 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    {i < savedMealsEntries.length - 1 && (
+                      <div className="border-t border-[#EEEEEE] my-2" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-[#F3F3F3] border-2 border-dashed border-[#BACAC5]/30 rounded-[16px] p-6 text-center">
+                <p className="text-[14px] font-medium text-[#3C4A46]">No saved meals yet.</p>
+                <p className="text-[12px] text-[#3C4A46]/70 mt-1">Go to the search screen & select 'Save as Meal' ❤️</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ─── Meal Sections (data-driven) ─── */}
         {meals.map(({ slot, entries: mealEntries, kcal }) => {

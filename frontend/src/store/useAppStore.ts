@@ -96,7 +96,7 @@ export const useAppStore = create<AppStore>()(
 
 /** Total consumed kcal across all meals today */
 export const selectConsumedKcal = (s: AppStore) =>
-  s.entries.reduce((sum, e) => sum + e.kcal, 0);
+  s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.kcal, 0);
 
 /** Consumed kcal per meal slot */
 export const selectKcalByMeal = (meal: MealSlot) => (s: AppStore) =>
