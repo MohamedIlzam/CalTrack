@@ -255,7 +255,9 @@ export default function HomePage() {
                         </div>
                         <div>
                           <p className="text-[14px] font-bold text-[#1A1C1C]">{entry.name}</p>
-                          <p className="text-[12px] font-medium text-[#3C4A46]">{entry.kcal} kcal • {entry.serving}</p>
+                          {expandedMealId !== entry.id && (
+                            <p className="text-[12px] font-medium text-[#3C4A46]">{entry.kcal} kcal • {entry.serving}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
