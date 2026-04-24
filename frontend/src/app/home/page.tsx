@@ -272,13 +272,45 @@ export default function HomePage() {
                     
                     {/* EXPANDED VIEW */}
                     {expandedMealId === entry.id && (
-                      <div className="pl-[60px] pb-3 pr-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className="pl-[60px] pb-4 pr-4 animate-in slide-in-from-top-2 duration-200">
+                        {/* Summary Header */}
+                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100/80">
+                          <div className="flex items-center gap-4">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-[#3C4A46]/40 uppercase tracking-widest leading-none mb-1">Items</span>
+                              <span className="text-[15px] font-extrabold text-[#1A1C1C] leading-none">
+                                {entry.ingredients?.length || 0}
+                              </span>
+                            </div>
+                            <div className="w-[1px] h-6 bg-gray-100" />
+                            <div className="flex gap-4">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-[#643E00]/60 uppercase tracking-widest leading-none mb-1">P</span>
+                                <span className="text-[15px] font-extrabold text-[#1A1C1C] leading-none">{entry.protein}g</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-[#FFAD3A]/80 uppercase tracking-widest leading-none mb-1">C</span>
+                                <span className="text-[15px] font-extrabold text-[#1A1C1C] leading-none">{entry.carbs}g</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-[#005047]/60 uppercase tracking-widest leading-none mb-1">F</span>
+                                <span className="text-[15px] font-extrabold text-[#1A1C1C] leading-none">{entry.fat}g</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right">
+                            <span className="text-[10px] font-bold text-[#006B5F]/40 uppercase tracking-widest leading-none mb-1 block">Total</span>
+                            <span className="text-[15px] font-extrabold text-[#006B5F] leading-none">{entry.kcal} kcal</span>
+                          </div>
+                        </div>
+
                         {entry.ingredients && entry.ingredients.length > 0 && (
-                          <div className="mb-3 border-l-2 border-[#006B5F]/20 pl-3 py-1">
+                          <div className="mb-4 border-l-2 border-[#006B5F]/10 pl-4 py-0.5 space-y-1">
                             {entry.ingredients.map((ing, idx) => (
-                              <p key={idx} className="text-[12px] text-[#3C4A46]/80 flex justify-between py-0.5">
+                              <p key={idx} className="text-[13px] font-medium text-[#3C4A46]/70 flex justify-between">
                                 <span>{ing.name}</span>
-                                <span className="font-medium">x{ing.qty}</span>
+                                <span className="text-[#1A1C1C]/40 font-bold text-[11px]">x{ing.qty}</span>
                               </p>
                             ))}
                           </div>
