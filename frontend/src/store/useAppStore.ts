@@ -5,7 +5,13 @@ import { persist } from "zustand/middleware";
 
 export type Goal = "lose" | "maintain" | "gain";
 export type ActivityLevel = "sedentary" | "light" | "moderate" | "active";
-export type MealSlot = "breakfast" | "lunch" | "dinner" | "snacks";
+export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack" | "snacks" | "saved_meals";
+
+export interface SubIngredient {
+  id: string;
+  name: string;
+  qty: number;
+}
 
 export interface FoodEntry {
   id: string;
@@ -16,6 +22,7 @@ export interface FoodEntry {
   fat: number;     // grams
   serving: string; // e.g. "1 piece", "2 tbsp"
   meal: MealSlot;
+  ingredients?: SubIngredient[];
 }
 
 /* ─────────────── Onboarding slice ─────────────── */
@@ -96,7 +103,7 @@ export const useAppStore = create<AppStore>()(
 
 /** Total consumed kcal across all meals today */
 export const selectConsumedKcal = (s: AppStore) =>
-  s.entries.reduce((sum, e) => sum + e.kcal, 0);
+  s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.kcal, 0);
 
 /** Consumed kcal per meal slot */
 export const selectKcalByMeal = (meal: MealSlot) => (s: AppStore) =>
