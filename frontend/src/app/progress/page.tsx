@@ -1,8 +1,26 @@
 "use client";
 
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
+import { useAppStore, selectConsumedKcal } from "@/store/useAppStore";
 
 export default function ProgressPage() {
+  const weightKg = useAppStore(s => s.weightKg) || 68.3;
+  const targetWeightKg = useAppStore(s => s.targetWeightKg) || 66.0;
+  const heightCm = useAppStore(s => s.heightCm) || 168;
+  const targetCalories = useAppStore(s => s.targetCalories) || 1850;
+  
+  const consumed = useAppStore(selectConsumedKcal);
+  const consumedCarbs = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.carbs, 0));
+  const consumedProtein = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.protein, 0));
+  const consumedFat = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.fat, 0));
+
+  const diff = Math.abs(weightKg - targetWeightKg).toFixed(1);
+  const diffText = weightKg > targetWeightKg ? "kg to lose" : "kg to gain";
+  
+  const bmi = (weightKg / Math.pow(heightCm / 100, 2)).toFixed(1);
+  const bmiValue = parseFloat(bmi);
+  const bmiPos = Math.min(95, Math.max(5, ((bmiValue - 15) / 15) * 100));
+
   return (
     <div className="min-h-screen font-body antialiased bg-background text-on-surface pb-[100px]">
       {/* Top App Bar */}
@@ -38,16 +56,16 @@ export default function ProgressPage() {
                 </p>
                 <div className="flex items-baseline gap-1.5">
                   <h2 className="font-headline font-extrabold text-[46px] tracking-tighter leading-none">
-                    4.2
+                    {diff}
                   </h2>
                   <span className="font-headline font-bold text-[13px] tracking-wide uppercase opacity-90">
-                    kg lost
+                    {diffText}
                   </span>
                 </div>
               </div>
               <div className="text-right pt-7">
                 <span className="font-headline font-bold text-[11px] opacity-80 uppercase tracking-widest">
-                  65% Of Goal Reached
+                  Target: {targetWeightKg} kg
                 </span>
               </div>
             </div>
@@ -103,7 +121,7 @@ export default function ProgressPage() {
                 <div className="relative z-10">
                   <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mb-1.5">Current</p>
                   <div className="flex items-baseline gap-1">
-                    <p className="font-headline font-extrabold text-[28px] leading-none">68.3</p>
+                    <p className="font-headline font-extrabold text-[28px] leading-none">{weightKg.toFixed(1)}</p>
                     <span className="text-xs font-bold opacity-90">kg</span>
                   </div>
                 </div>
@@ -113,7 +131,7 @@ export default function ProgressPage() {
                 <div className="relative z-10">
                   <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mb-1.5">Goal</p>
                   <div className="flex items-baseline gap-1">
-                    <p className="font-headline font-extrabold text-[28px] leading-none">66.0</p>
+                    <p className="font-headline font-extrabold text-[28px] leading-none">{targetWeightKg.toFixed(1)}</p>
                     <span className="text-xs font-bold opacity-90">kg</span>
                   </div>
                 </div>
@@ -168,17 +186,17 @@ export default function ProgressPage() {
           </div>
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1">
-              <p className="text-xs text-outline font-medium">Avg. Calories</p>
+              <p className="text-xs text-outline font-medium">Consumed Today</p>
               <div className="flex items-baseline gap-1">
                 <h4 className="font-headline font-extrabold text-4xl text-on-surface">
-                  1,840
+                  {consumed.toLocaleString()}
                 </h4>
                 <span className="text-sm font-bold text-outline">kcal</span>
               </div>
             </div>
             <div className="bg-primary/10 px-3 py-1 rounded-full flex flex-col justify-center align-center h-auto items-center">
               <p className="text-[10px] font-bold text-primary uppercase tracking-tighter w-full block m-0 h-auto">
-                -12% vs Target
+                Target: {targetCalories}
               </p>
             </div>
           </div>
@@ -243,19 +261,19 @@ export default function ProgressPage() {
               <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">
                 Carbs
               </p>
-              <p className="font-headline font-bold text-sm">210g</p>
+              <p className="font-headline font-bold text-sm">{consumedCarbs}g</p>
             </button>
             <button className="bg-surface-container-low p-3 rounded-xl text-center border border-transparent">
               <p className="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">
                 Protein
               </p>
-              <p className="font-headline font-bold text-sm">85g</p>
+              <p className="font-headline font-bold text-sm">{consumedProtein}g</p>
             </button>
             <button className="bg-surface-container-low p-3 rounded-xl text-center border border-transparent">
               <p className="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">
                 Fat
               </p>
-              <p className="font-headline font-bold text-sm">52g</p>
+              <p className="font-headline font-bold text-sm">{consumedFat}g</p>
             </button>
           </div>
           {/* Trend Visualization for selected Macro */}
@@ -292,13 +310,13 @@ export default function ProgressPage() {
             </div>
             <div className="flex flex-col items-end">
               <p className="font-headline font-black text-3xl text-on-surface">
-                24.1
+                {bmi}
               </p>
               <div className="flex items-center gap-1 bg-tertiary-container/20 px-2 py-0.5 rounded text-[10px] font-bold text-tertiary uppercase tracking-tighter">
                 <span className="material-symbols-outlined text-[12px]">
-                  trending_down
+                  monitor_weight
                 </span>
-                -0.4 vs Last Month
+                Current BMI
               </div>
             </div>
           </div>
@@ -318,7 +336,10 @@ export default function ProgressPage() {
               <div className="h-full bg-error-container w-[20%]" title="Obese > 27.5"></div>
             </div>
             {/* Marker */}
-            <div className="absolute top-7 left-[55%] transform -translate-x-1/2 flex flex-col items-center">
+            <div 
+              className="absolute top-7 transform -translate-x-1/2 flex flex-col items-center transition-all duration-700 ease-out"
+              style={{ left: `${bmiPos}%` }}
+            >
               <div className="w-1.5 h-4 bg-on-surface rounded-full shadow-sm"></div>
             </div>
             {/* Range markers */}
@@ -347,7 +368,7 @@ export default function ProgressPage() {
               info
             </span>
             <p className="text-xs text-on-surface-variant leading-relaxed">
-              Your current BMI is <span className="font-bold">24.1</span>. For South
+              Your current BMI is <span className="font-bold">{bmi}</span>. For South
               Asians, health risks increase above{" "}
               <span className="font-bold text-tertiary">23.0</span>. Aiming for{" "}
               <span className="text-primary font-bold">22.5</span> is
