@@ -34,6 +34,8 @@ const MEAL_ICONS: Record<MealSlot, string> = {
   lunch: "🍛",
   dinner: "🌙",
   snacks: "🍪",
+  snack: "🍪",
+  saved_meals: "❤️",
 };
 
 const MEAL_EMPTY_CTA: Record<MealSlot, { text: string; question: string }> = {
@@ -41,6 +43,8 @@ const MEAL_EMPTY_CTA: Record<MealSlot, { text: string; question: string }> = {
   lunch: { text: "Log Lunch", question: "What did you have for lunch?" },
   dinner: { text: "Quick Add", question: "Plan your dinner in advance" },
   snacks: { text: "Add Snack", question: "Had a snack today?" },
+  snack: { text: "Add Snack", question: "Had a snack today?" },
+  saved_meals: { text: "Log Saved Meal", question: "Track one of your saved meals" },
 };
 
 /* ─── Component ─── */
