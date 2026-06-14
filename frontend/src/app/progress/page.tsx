@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, selectConsumedKcal } from "@/store/useAppStore";
 
@@ -14,7 +15,98 @@ export default function ProgressPage() {
   const consumedProtein = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.protein, 0));
   const consumedFat = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.fat, 0));
 
+  const [caloriePeriod, setCaloriePeriod] = useState<"today" | "yesterday" | "7days" | "month">("7days");
+  const [activeMacro, setActiveMacro] = useState<"carbs" | "protein" | "fat">("carbs");
+
   const diff = Math.abs(weightKg - targetWeightKg).toFixed(1);
+
+  const caloriePeriodData = {
+    today: {
+      label: "Consumed Today",
+      kcal: consumed,
+    },
+    yesterday: {
+      label: "Consumed Yesterday",
+      kcal: 1920,
+    },
+    "7days": {
+      label: "7-Day Average",
+      kcal: Math.round((1920 + 2100 + consumed + 1780 + 2150 + 2400 + 1400) / 7),
+    },
+    month: {
+      label: "Monthly Average",
+      kcal: 1810,
+    }
+  };
+
+  const calorieChartData = {
+    today: [
+      { label: "B", kcal: Math.round(consumed * 0.25), height: "25%", color: "bg-primary" },
+      { label: "L", kcal: Math.round(consumed * 0.45), height: "45%", color: "bg-primary" },
+      { label: "D", kcal: Math.round(consumed * 0.20), height: "20%", color: "bg-primary" },
+      { label: "S", kcal: Math.round(consumed * 0.10), height: "10%", color: "bg-primary" },
+    ],
+    yesterday: [
+      { label: "B", kcal: 420, height: "35%", color: "bg-primary/40" },
+      { label: "L", kcal: 880, height: "70%", color: "bg-primary/40" },
+      { label: "D", kcal: 500, height: "50%", color: "bg-primary" },
+      { label: "S", kcal: 120, height: "15%", color: "bg-primary/40" },
+    ],
+    "7days": [
+      { label: "M", kcal: 1920, height: "85%", color: "bg-primary/30" },
+      { label: "T", kcal: 2100, height: "90%", color: "bg-primary/30" },
+      { label: "W", kcal: consumed, height: `${Math.min(100, Math.round((consumed / targetCalories) * 100))}%`, color: consumed > targetCalories ? "bg-error/40" : "bg-primary" },
+      { label: "T", kcal: 1780, height: "80%", color: "bg-primary/30" },
+      { label: "F", kcal: 2150, height: "95%", color: "bg-primary/30" },
+      { label: "S", kcal: 2400, height: "100%", color: "bg-error/40" },
+      { label: "S", kcal: 1400, height: "60%", color: "bg-primary/30" },
+    ],
+    month: [
+      { label: "W1", kcal: 1820, height: "80%", color: "bg-primary/30" },
+      { label: "W2", kcal: 1910, height: "85%", color: "bg-primary/30" },
+      { label: "W3", kcal: 1740, height: "75%", color: "bg-primary" },
+      { label: "W4", kcal: 1880, height: "82%", color: "bg-primary/30" },
+    ]
+  };
+
+  const macroChartData = {
+    carbs: {
+      description: "Carbohydrate intake peaked on Saturday due to larger portions of rice.",
+      bars: [
+        { label: "Mon", height: "60%" },
+        { label: "Tue", height: "70%" },
+        { label: "Wed", height: "55%" },
+        { label: "Thu", height: "80%" },
+        { label: "Fri", height: "65%" },
+        { label: "Sat", height: "90%" },
+        { label: "Sun", height: "75%" },
+      ]
+    },
+    protein: {
+      description: "Protein intake was highest on Sunday, driven by chicken curry and egg hoppers.",
+      bars: [
+        { label: "Mon", height: "75%" },
+        { label: "Tue", height: "60%" },
+        { label: "Wed", height: "80%" },
+        { label: "Thu", height: "70%" },
+        { label: "Fri", height: "85%" },
+        { label: "Sat", height: "65%" },
+        { label: "Sun", height: "90%" },
+      ]
+    },
+    fat: {
+      description: "Fat intake spiked on Thursday, mostly from short eats and coconut-based curries.",
+      bars: [
+        { label: "Mon", height: "50%" },
+        { label: "Tue", height: "55%" },
+        { label: "Wed", height: "45%" },
+        { label: "Thu", height: "85%" },
+        { label: "Fri", height: "60%" },
+        { label: "Sat", height: "75%" },
+        { label: "Sun", height: "50%" },
+      ]
+    }
+  };
   const diffText = weightKg > targetWeightKg ? "kg to lose" : "kg to gain";
   
   const bmi = (weightKg / Math.pow(heightCm / 100, 2)).toFixed(1);
@@ -170,26 +262,29 @@ export default function ProgressPage() {
             </div>
             {/* Time Period Tabs */}
             <div className="flex bg-surface-container-low p-1 rounded-lg">
-              <button className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider text-outline">
-                Today
-              </button>
-              <button className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider text-outline">
-                Yesterday
-              </button>
-              <button className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider bg-surface-container-lowest text-primary shadow-sm rounded-md">
-                7 Days
-              </button>
-              <button className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider text-outline">
-                Month
-              </button>
+              {(["today", "yesterday", "7days", "month"] as const).map((period) => (
+                <button
+                  key={period}
+                  onClick={() => setCaloriePeriod(period)}
+                  className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    caloriePeriod === period
+                      ? "bg-surface-container-lowest text-primary shadow-sm rounded-md"
+                      : "text-outline hover:text-on-surface"
+                  }`}
+                >
+                  {period === "7days" ? "7 Days" : period}
+                </button>
+              ))}
             </div>
           </div>
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1">
-              <p className="text-xs text-outline font-medium">Consumed Today</p>
+              <p className="text-xs text-outline font-medium">
+                {caloriePeriodData[caloriePeriod].label}
+              </p>
               <div className="flex items-baseline gap-1">
                 <h4 className="font-headline font-extrabold text-4xl text-on-surface">
-                  {consumed.toLocaleString()}
+                  {caloriePeriodData[caloriePeriod].kcal.toLocaleString()}
                 </h4>
                 <span className="text-sm font-bold text-outline">kcal</span>
               </div>
@@ -200,37 +295,19 @@ export default function ProgressPage() {
               </p>
             </div>
           </div>
-          {/* 7-Day Calorie Bar Chart */}
+          {/* Calorie Bar Chart */}
           <div className="space-y-4">
             <div className="flex items-end justify-between h-24 gap-2 px-1">
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/30 rounded-t-sm h-[85%]" title="1,920 kcal"></div>
-                <span className="text-[9px] font-bold text-outline">M</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/30 rounded-t-sm h-[90%]" title="2,100 kcal"></div>
-                <span className="text-[9px] font-bold text-outline">T</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary rounded-t-sm h-[75%]" title="1,650 kcal"></div>
-                <span className="text-[9px] font-bold text-outline">W</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/30 rounded-t-sm h-[80%]" title="1,780 kcal"></div>
-                <span className="text-[9px] font-bold text-outline">T</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/30 rounded-t-sm h-[95%]" title="2,150 kcal"></div>
-                <span className="text-[9px] font-bold text-outline">F</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-error/40 rounded-t-sm h-[100%]" title="2,400 kcal"></div>
-                <span className="text-[9px] font-bold text-outline">S</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/30 rounded-t-sm h-[60%]" title="1,400 kcal"></div>
-                <span className="text-[9px] font-bold text-outline">S</span>
-              </div>
+              {calorieChartData[caloriePeriod].map((bar, idx) => (
+                <div key={idx} className="flex flex-col items-center flex-1 gap-2 animate-fade-in">
+                  <div
+                    className={`w-full rounded-t-sm transition-all duration-500 ${bar.color}`}
+                    style={{ height: bar.height }}
+                    title={`${bar.kcal.toLocaleString()} kcal`}
+                  ></div>
+                  <span className="text-[9px] font-bold text-outline">{bar.label}</span>
+                </div>
+              ))}
             </div>
             <div className="flex items-center justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-outline">
               <div className="flex items-center gap-1.5">
@@ -257,42 +334,48 @@ export default function ProgressPage() {
           </div>
           {/* Macro Tabs/Filters */}
           <div className="grid grid-cols-3 gap-2">
-            <button className="bg-primary/10 border border-primary/20 p-3 rounded-xl text-center">
-              <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">
-                Carbs
-              </p>
-              <p className="font-headline font-bold text-sm">{consumedCarbs}g</p>
-            </button>
-            <button className="bg-surface-container-low p-3 rounded-xl text-center border border-transparent">
-              <p className="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">
-                Protein
-              </p>
-              <p className="font-headline font-bold text-sm">{consumedProtein}g</p>
-            </button>
-            <button className="bg-surface-container-low p-3 rounded-xl text-center border border-transparent">
-              <p className="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">
-                Fat
-              </p>
-              <p className="font-headline font-bold text-sm">{consumedFat}g</p>
-            </button>
+            {(["carbs", "protein", "fat"] as const).map((macro) => {
+              const isActive = activeMacro === macro;
+              const label = macro.charAt(0).toUpperCase() + macro.slice(1);
+              const val = macro === "carbs" ? consumedCarbs : macro === "protein" ? consumedProtein : consumedFat;
+              return (
+                <button
+                  key={macro}
+                  onClick={() => setActiveMacro(macro)}
+                  className={`p-3 rounded-xl text-center border transition-all duration-200 active:scale-[0.98] cursor-pointer ${
+                    isActive
+                      ? "bg-primary/10 border-primary/20 text-primary font-bold"
+                      : "bg-surface-container-low border-transparent text-outline hover:text-on-surface"
+                  }`}
+                >
+                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${isActive ? "text-primary" : "text-outline"}`}>
+                    {label}
+                  </p>
+                  <p className="font-headline font-bold text-sm">{val}g</p>
+                </button>
+              );
+            })}
           </div>
           {/* Trend Visualization for selected Macro */}
           <div className="bg-surface-container-low/50 p-4 rounded-xl">
             <div className="flex justify-between items-end h-16 gap-1 mb-2">
-              <div className="w-full bg-primary/20 rounded-t-sm h-[60%]"></div>
-              <div className="w-full bg-primary/20 rounded-t-sm h-[70%]"></div>
-              <div className="w-full bg-primary/20 rounded-t-sm h-[55%]"></div>
-              <div className="w-full bg-primary/60 rounded-t-sm h-[80%]"></div>
-              <div className="w-full bg-primary/20 rounded-t-sm h-[65%]"></div>
-              <div className="w-full bg-primary rounded-t-sm h-[90%]"></div>
-              <div className="w-full bg-primary/20 rounded-t-sm h-[75%]"></div>
+              {macroChartData[activeMacro].bars.map((bar, idx) => (
+                <div
+                  key={idx}
+                  className={`w-full rounded-t-sm transition-all duration-500 ${
+                    idx === 5 ? "bg-primary" : "bg-primary/25"
+                  }`}
+                  style={{ height: bar.height }}
+                  title={`${bar.label}: ${bar.height}`}
+                ></div>
+              ))}
             </div>
             <div className="flex justify-between text-[8px] font-bold text-outline uppercase px-1">
               <span>Mon</span>
               <span>Sun</span>
             </div>
             <p className="mt-4 text-[11px] text-center text-on-surface-variant font-medium">
-              Carbohydrate intake peaked on <span className="font-bold">Saturday</span> due to larger portions of rice.
+              {macroChartData[activeMacro].description}
             </p>
           </div>
         </section>
