@@ -15,7 +15,9 @@ export default function ProgressPage() {
   const consumedProtein = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.protein, 0));
   const consumedFat = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.fat, 0));
 
+  // State to track the active time period in the Calorie Adherence section
   const [caloriePeriod, setCaloriePeriod] = useState<"today" | "yesterday" | "7days" | "month">("7days");
+  // State to track the active macro filter in the Macro Trends section
   const [activeMacro, setActiveMacro] = useState<"carbs" | "protein" | "fat">("carbs");
 
   const diff = Math.abs(weightKg - targetWeightKg).toFixed(1);
