@@ -6,9 +6,10 @@ import { Button } from "../ui/Button";
 
 interface Props {
   onNext: () => void;
+  onLogin: () => void;
 }
 
-export function Step0Welcome({ onNext }: Props) {
+export function Step0Welcome({ onNext, onLogin }: Props) {
   return (
     <div className="flex flex-col min-h-[100dvh] bg-white w-full relative overflow-hidden">
       {/* Decorative Blobs */}
@@ -75,9 +76,9 @@ export function Step0Welcome({ onNext }: Props) {
           <Button fullWidth size="large" onClick={onNext} className="mb-4 !rounded-[24px]">
             Get Started
           </Button>
-          <div className="flex items-center justify-center gap-1 text-[12px] font-bold w-full uppercase leading-[16px]">
+          <div className="flex items-center justify-between text-[12px] font-bold w-full uppercase leading-[16px] max-w-[280px]">
             <span className="text-[#94A3B8] tracking-[0.3px]">ALREADY A MEMBER?</span>
-            <button className="text-[#006B5F] tracking-[0.3px] hover:underline">SIGN IN</button>
+            <button onClick={onLogin} className="text-[#006B5F] tracking-[0.3px] hover:underline cursor-pointer">SIGN IN</button>
           </div>
         </div>
       </div>

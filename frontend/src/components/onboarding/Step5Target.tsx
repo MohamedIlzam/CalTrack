@@ -24,12 +24,7 @@ export function Step5Target({ onNext, onBack }: Props) {
   const targetFatG = draft.targetFatG;
   const goal = draft.goal || "lose";
 
-  const completeOnboarding = useAppStore((s) => s.completeOnboarding);
-  const setOnboarding = useAppStore((s) => s.setOnboarding);
-
   const handleStartTracking = () => {
-    setOnboarding(draft);
-    completeOnboarding();
     onNext();
   };
 

@@ -39,6 +39,8 @@ export interface OnboardingState {
   targetProteinG: number;
   targetCarbsG: number;
   targetFatG: number;
+  token: string | null;
+  email: string | null;
 }
 
 /* ─────────────── Daily log slice ─────────────── */
@@ -55,6 +57,8 @@ interface Actions {
   addFoodEntry: (entry: FoodEntry) => void;
   removeFoodEntry: (id: string) => void;
   clearEntries: () => void;
+  setAuth: (token: string, user: any) => void;
+  logout: () => void;
 }
 
 /* ─────────────── Store ─────────────── */
@@ -76,6 +80,8 @@ export const useAppStore = create<AppStore>()(
       targetProteinG: 0,
       targetCarbsG: 0,
       targetFatG: 0,
+      token: null,
+      email: null,
 
       // Daily log defaults
       entries: [],
@@ -92,6 +98,40 @@ export const useAppStore = create<AppStore>()(
         set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),
 
       clearEntries: () => set({ entries: [] }),
+
+      setAuth: (token, user) => set((state) => ({
+        ...state,
+        token,
+        email: user.email,
+        name: user.name,
+        goal: user.goal ? (user.goal.toLowerCase() as Goal) : state.goal,
+        weightKg: user.weightKg || state.weightKg,
+        targetWeightKg: user.targetWeightKg || state.targetWeightKg,
+        heightCm: user.heightCm || state.heightCm,
+        activityLevel: user.activityLevel ? (user.activityLevel.toLowerCase() as ActivityLevel) : state.activityLevel,
+        targetCalories: user.targetCalories || state.targetCalories,
+        targetProteinG: user.targetProteinG || state.targetProteinG,
+        targetCarbsG: user.targetCarbsG || state.targetCarbsG,
+        targetFatG: user.targetFatG || state.targetFatG,
+        hasOnboarded: true,
+      })),
+
+      logout: () => set({
+        hasOnboarded: false,
+        name: "",
+        email: null,
+        token: null,
+        goal: "lose",
+        weightKg: 0,
+        targetWeightKg: 0,
+        heightCm: 0,
+        activityLevel: "sedentary",
+        targetCalories: 0,
+        targetProteinG: 0,
+        targetCarbsG: 0,
+        targetFatG: 0,
+        entries: [],
+      }),
     }),
     {
       name: "caltrack-storage",
