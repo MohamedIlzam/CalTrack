@@ -9,6 +9,7 @@ import { Step2BodyDetails } from "./Step2BodyDetails";
 import { Step3Activity } from "./Step3Activity";
 import { Step4Food } from "./Step4Food";
 import { Step5Target } from "./Step5Target";
+import { Step6Auth } from "./Step6Auth";
 
 export const OnboardingContext = createContext<{
   draft: Partial<OnboardingState>;
@@ -24,7 +25,8 @@ export const useOnboardingDraft = () => {
 export function OnboardingFlow() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const totalSteps = 5;
+  const [authMode, setAuthMode] = useState<"register" | "login">("register");
+  const totalSteps = 6;
 
   const [draft, setDraft] = useState<Partial<OnboardingState>>({
     goal: "lose",
@@ -35,13 +37,22 @@ export function OnboardingFlow() {
     setDraft((prev) => ({ ...prev, ...data }));
   };
 
-  const handleNext = () => setStep((s) => Math.min(s + 1, totalSteps));
+  const handleNext = () => {
+    setAuthMode("register");
+    setStep((s) => Math.min(s + 1, totalSteps));
+  };
+  
   const handleBack = () => setStep((s) => Math.max(s - 1, 0));
+
+  const handleDirectLogin = () => {
+    setAuthMode("login");
+    setStep(6);
+  };
 
   const renderStep = () => {
     switch (step) {
       case 0:
-        return <Step0Welcome onNext={handleNext} />;
+        return <Step0Welcome onNext={handleNext} onLogin={handleDirectLogin} />;
       case 1:
         return <Step1Goal onNext={handleNext} onBack={handleBack} />;
       case 2:
@@ -51,7 +62,20 @@ export function OnboardingFlow() {
       case 4:
         return <Step4Food onNext={handleNext} onBack={handleBack} />;
       case 5:
-        return <Step5Target onNext={() => router.push('/home')} onBack={handleBack} />;
+        return <Step5Target onNext={handleNext} onBack={handleBack} />;
+      case 6:
+        return (
+          <Step6Auth 
+            onBack={() => {
+              if (authMode === "login" && !draft.weightKg) {
+                setStep(0);
+              } else {
+                handleBack();
+              }
+            }} 
+            initialMode={authMode} 
+          />
+        );
       default:
         return null;
     }
