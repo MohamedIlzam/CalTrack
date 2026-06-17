@@ -28,6 +28,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get foodItem() { return this.client.foodItem; }
   get mealLog() { return this.client.mealLog; }
   get mealLogEntry() { return this.client.mealLogEntry; }
+  get weightEntry() { return this.client.weightEntry; }
 
   async onModuleInit() {
     await this.client.$connect();
