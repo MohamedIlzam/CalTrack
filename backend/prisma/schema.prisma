@@ -59,6 +59,7 @@ model User {
   targetFatG      Int?
 
   mealLogs        MealLog[]
+  weightEntries   WeightEntry[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -127,4 +128,20 @@ model MealLogEntry {
   foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
 
   createdAt  DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+// WEIGHT ENTRY
+// Tracks user weight logs over time.
+// ─────────────────────────────────────────────
+
+model WeightEntry {
+  id         String   @id @default(uuid())
+  userId     String
+  weightKg   Float
+  recordedAt DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, recordedAt])
 }
