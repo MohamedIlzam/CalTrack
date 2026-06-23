@@ -42,7 +42,8 @@ export function Step6Auth({ onBack, initialMode = "register" }: Props) {
             password,
           };
 
-      const response = await fetch(`http://localhost:3001/auth/${endpoint}`, {
+      const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+      const response = await fetch(`http://${hostname}:3001/auth/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
