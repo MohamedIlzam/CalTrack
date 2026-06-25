@@ -70,20 +70,31 @@ model User {
 // ─────────────────────────────────────────────
 
 model FoodItem {
-  id          String  @id @default(uuid())
-  name        String
-  serving     String          // e.g. "1 piece", "100g"
-  kcal        Float
-  proteinG    Float
-  carbsG      Float
-  fatG        Float
-  isCustom    Boolean @default(false)  // true = user-created entry
-  createdById String?                  // null = system food
+  id          String   @id @default(uuid())
+  name        String   // e.g. "Chicken Kottu"
+  category    String   // e.g. "Rice & Bread", "Curries", "Sides", "Extras" (matches frontend category chips)
+  serving     String   // e.g. "1 portion (approx 400g)", "10 pieces", "100g"
+  
+  // Macronutrients
+  kcal        Float    // Calories
+  proteinG    Float    // Protein in grams
+  carbsG      Float    // Carbs in grams
+  fatG        Float    // Fat in grams
+
+  // Commercial / Scanning Support (Optional but helpful for MVP)
+  brand       String?  // e.g. "Munchee", "Maliban" (null for homemade foods)
+  barcode     String?  @unique // Barcode number (null for homemade foods)
+
+  // Custom User Entries
+  isCustom    Boolean  @default(false) // true = created by user, false = system-wide standard food
+  createdById String?  // ID of the user who created it (null if system food)
 
   mealLogEntries MealLogEntry[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([name])
 }
 
 // ─────────────────────────────────────────────
