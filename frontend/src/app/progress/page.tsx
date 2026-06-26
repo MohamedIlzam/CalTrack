@@ -1,14 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, selectConsumedKcal } from "@/store/useAppStore";
+
+interface WeightEntry {
+  id: string;
+  weightKg: number;
+  recordedAt: string;
+}
 
 export default function ProgressPage() {
   const weightKg = useAppStore(s => s.weightKg) || 68.3;
   const targetWeightKg = useAppStore(s => s.targetWeightKg) || 66.0;
   const heightCm = useAppStore(s => s.heightCm) || 168;
   const targetCalories = useAppStore(s => s.targetCalories) || 1850;
+  const token = useAppStore(s => s.token);
+  const setOnboarding = useAppStore(s => s.setOnboarding);
   
   const consumed = useAppStore(selectConsumedKcal);
   const consumedCarbs = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.carbs, 0));
@@ -19,6 +27,76 @@ export default function ProgressPage() {
   const [caloriePeriod, setCaloriePeriod] = useState<"today" | "yesterday" | "7days" | "month">("7days");
   // State to track the active macro filter in the Macro Trends section
   const [activeMacro, setActiveMacro] = useState<"carbs" | "protein" | "fat">("carbs");
+
+  // Weight history state
+  const [weightHistory, setWeightHistory] = useState<WeightEntry[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [weightInput, setWeightInput] = useState(weightKg.toString());
+  const [submitting, setSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const getApiUrl = (path: string) => {
+    const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+    return `http://${hostname}:3001${path}`;
+  };
+
+  const fetchWeightHistory = async () => {
+    if (!token) return;
+    try {
+      const response = await fetch(getApiUrl("/progress/weight"), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setWeightHistory(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch weight history", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchWeightHistory();
+  }, [token]);
+
+  // Synchronize input when weightKg changes
+  useEffect(() => {
+    setWeightInput(weightKg.toString());
+  }, [weightKg]);
+
+  const handleLogWeight = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(weightInput);
+    if (isNaN(val) || val <= 0) {
+      setModalError("Please enter a valid weight in kg");
+      return;
+    }
+    setSubmitting(true);
+    setModalError(null);
+    try {
+      const response = await fetch(getApiUrl("/progress/weight"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ weightKg: val }),
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || "Failed to save weight entry");
+      }
+      setOnboarding({ weightKg: val });
+      await fetchWeightHistory();
+      setIsModalOpen(false);
+    } catch (err: any) {
+      setModalError(err.message || "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const diff = Math.abs(weightKg - targetWeightKg).toFixed(1);
 
@@ -115,6 +193,42 @@ export default function ProgressPage() {
   const bmiValue = parseFloat(bmi);
   const bmiPos = Math.min(95, Math.max(5, ((bmiValue - 15) / 15) * 100));
 
+  // Dynamic weight chart math
+  const weights = weightHistory.map(entry => entry.weightKg);
+  const allWeights = weights.length > 0 ? weights : [weightKg];
+  const maxW = Math.max(...allWeights, targetWeightKg) + 2;
+  const minW = Math.max(0, Math.min(...allWeights, targetWeightKg) - 2);
+
+  const getX = (index: number, total: number) => {
+    if (total <= 1) return 150;
+    return (index / (total - 1)) * 300;
+  };
+
+  const getY = (w: number) => {
+    const range = maxW - minW;
+    if (range === 0) return 50;
+    return 85 - ((w - minW) / range) * 70;
+  };
+
+  const graphPoints = allWeights.map((w, idx) => ({
+    x: getX(idx, allWeights.length),
+    y: getY(w),
+  }));
+
+  const pathD = graphPoints.reduce((acc, pt, idx) => {
+    if (idx === 0) return `M ${pt.x} ${pt.y}`;
+    return `${acc} L ${pt.x} ${pt.y}`;
+  }, "");
+
+  const targetY = getY(targetWeightKg);
+
+  const startWeight = weightHistory.length > 0 ? weightHistory[0].weightKg : weightKg;
+  const totalChangeNeeded = Math.abs(startWeight - targetWeightKg);
+  const currentChangeDone = Math.abs(startWeight - weightKg);
+  const progressPercent = totalChangeNeeded > 0 
+    ? Math.min(100, Math.max(5, Math.round((currentChangeDone / totalChangeNeeded) * 100)))
+    : 100;
+
   return (
     <div className="min-h-screen font-body antialiased bg-background text-on-surface pb-[100px]">
       {/* Top App Bar */}
@@ -166,7 +280,10 @@ export default function ProgressPage() {
 
             {/* Progress Bar */}
             <div className="w-full h-3.5 bg-[#A1ECD9]/60 rounded-full mb-10 overflow-hidden drop-shadow-sm shadow-inner relative">
-              <div className="absolute left-0 top-0 h-full bg-[#085C50] w-[65%] rounded-full shadow-lg"></div>
+              <div 
+                className="absolute left-0 top-0 h-full bg-[#085C50] rounded-full shadow-lg transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              ></div>
             </div>
 
             {/* Graph Section */}
@@ -174,13 +291,13 @@ export default function ProgressPage() {
               {/* Y-axis grid and labels */}
               <div className="absolute inset-0 flex flex-col justify-between pb-8">
                 <div className="relative w-full border-t border-[#A1ECD9]/40">
-                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">75KG</span>
+                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">{maxW.toFixed(0)}KG</span>
                 </div>
                 <div className="relative w-full border-t border-[#A1ECD9]/40">
-                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">70KG</span>
+                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">{((maxW + minW) / 2).toFixed(0)}KG</span>
                 </div>
                 <div className="relative w-full border-t border-[#A1ECD9]/40">
-                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">65KG</span>
+                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">{minW.toFixed(0)}KG</span>
                 </div>
               </div>
 
@@ -188,38 +305,65 @@ export default function ProgressPage() {
               <div className="absolute inset-0 pb-8 pl-[12%]">
                 <svg className="w-full h-full overflow-visible" viewBox="0 0 300 100" preserveAspectRatio="none">
                   {/* Target Path (dashed white) */}
-                  <line x1="0" y1="15" x2="300" y2="85" stroke="white" strokeWidth="2.5" strokeDasharray="6,4" opacity="0.9" />
+                  <line x1="0" y1={targetY} x2="300" y2={targetY} stroke="white" strokeWidth="2.5" strokeDasharray="6,4" opacity="0.9" />
                   
                   {/* Actual Path (solid curve) */}
-                  <path d="M 0 15 C 60 45, 100 35, 150 85 C 195 125, 235 110, 275 65" fill="none" stroke="#085C50" strokeWidth="4.5" strokeLinecap="round" />
+                  {pathD && (
+                    <path d={pathD} fill="none" stroke="#085C50" strokeWidth="4.5" strokeLinecap="round" />
+                  )}
                   
                   {/* Glowing end dot */}
-                  <circle cx="275" cy="65" r="4.5" fill="#085C50" />
-                  <circle cx="275" cy="65" r="9" fill="#085C50" opacity="0.3" />
+                  {graphPoints.map((pt, idx) => (
+                    <g key={idx}>
+                      <circle cx={pt.x} cy={pt.y} r="3.5" fill="#085C50" />
+                      {idx === graphPoints.length - 1 && (
+                        <circle cx={pt.x} cy={pt.y} r="8" fill="#085C50" opacity="0.3" />
+                      )}
+                    </g>
+                  ))}
                 </svg>
               </div>
 
               {/* X-axis labels */}
               <div className="absolute bottom-0 w-full pl-[12%] flex justify-between text-[9px] font-bold opacity-60 uppercase tracking-widest px-2">
-                <span className="-translate-x-1/2">Week 1</span>
-                <span className="-translate-x-1/2">Week 2</span>
-                <span className="-translate-x-1/2">Week 3</span>
-                <span className="-translate-x-1/2 -mr-3">Now</span>
+                {weightHistory.length <= 1 ? (
+                  <>
+                    <span>Start</span>
+                    <span>Now</span>
+                  </>
+                ) : weightHistory.length === 2 ? (
+                  <>
+                    <span>{new Date(weightHistory[0].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
+                    <span>{new Date(weightHistory[1].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{new Date(weightHistory[0].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
+                    <span>{new Date(weightHistory[Math.floor(weightHistory.length / 2)].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
+                    <span>{new Date(weightHistory[weightHistory.length - 1].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
+                  </>
+                )}
               </div>
             </div>
 
             {/* Metric Cards */}
             <div className="grid grid-cols-2 gap-4 mb-8">
-              <div className="bg-[#85EADA]/40 rounded-[20px] p-5 backdrop-blur-md relative overflow-hidden flex flex-col items-start">
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="bg-[#85EADA]/40 hover:bg-[#85EADA]/60 active:scale-[0.97] transition-all rounded-[20px] p-5 backdrop-blur-md relative overflow-hidden flex flex-col items-start cursor-pointer group text-left border-none outline-none"
+              >
                 <div className="absolute inset-0 bg-white opacity-20"></div>
-                <div className="relative z-10">
-                  <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mb-1.5">Current</p>
-                  <div className="flex items-baseline gap-1">
-                    <p className="font-headline font-extrabold text-[28px] leading-none">{weightKg.toFixed(1)}</p>
-                    <span className="text-xs font-bold opacity-90">kg</span>
+                <div className="relative z-10 w-full flex justify-between items-start">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5 opacity-80">Current</p>
+                    <div className="flex items-baseline gap-1">
+                      <p className="font-headline font-extrabold text-[28px] leading-none text-[#085C50]">{weightKg.toFixed(1)}</p>
+                      <span className="text-xs font-bold opacity-90 text-[#085C50]">kg</span>
+                    </div>
                   </div>
+                  <span className="material-symbols-outlined text-[18px] text-[#085C50] opacity-60 group-hover:opacity-100 transition-opacity">add_circle</span>
                 </div>
-              </div>
+              </button>
               <div className="bg-[#85EADA]/40 rounded-[20px] p-5 backdrop-blur-md relative overflow-hidden flex flex-col items-end text-right">
                 <div className="absolute inset-0 bg-white opacity-20"></div>
                 <div className="relative z-10">
@@ -246,7 +390,7 @@ export default function ProgressPage() {
 
             {/* Footer Text */}
             <p className="text-center text-[12px] font-bold opacity-80 italic font-body">
-              Just 2.3 kg away from your Sri Lankan health target
+              Just {diff} kg away from your Sri Lankan health target
             </p>
           </div>
         </section>
@@ -706,6 +850,82 @@ export default function ProgressPage() {
       </main>
 
       <AppBottomNav activeTab="progress" />
+
+      {/* Log Weight Slide-Up Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm transition-opacity duration-300">
+          <div className="absolute inset-0" onClick={() => setIsModalOpen(false)} />
+          
+          <div className="relative w-full max-w-[430px] bg-white rounded-t-[32px] p-6 shadow-2xl z-10 transition-transform transform translate-y-0 duration-350 flex flex-col gap-5 border-t border-gray-100 pb-10">
+            <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-1" />
+            
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black text-[#1A1C1C] tracking-tight">Log Today's Weight</h3>
+                <p className="text-xs text-[#64748B] mt-0.5">Track your South Asian BMI & target journey</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[#1A1C1C] hover:bg-gray-200 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {modalError && (
+              <div className="bg-red-50 text-red-600 border border-red-100 text-xs font-semibold rounded-xl p-3 leading-normal flex items-start gap-2">
+                <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>{modalError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleLogWeight} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 pl-1">
+                  Weight (kg)
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="10"
+                    max="300"
+                    required
+                    autoFocus
+                    placeholder="e.g. 72.5"
+                    value={weightInput}
+                    onChange={(e) => setWeightInput(e.target.value)}
+                    className="w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl focus:border-[#2DD4BF] focus:bg-white focus:outline-none text-sm transition-colors font-extrabold text-[#1A1C1C]"
+                  />
+                  <span className="absolute right-4 font-bold text-xs text-gray-400">kg</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-3.5 bg-gray-100 hover:bg-gray-200 rounded-2xl text-xs font-bold text-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 py-3.5 bg-[#006B5F] hover:bg-[#00574D] disabled:bg-gray-300 rounded-2xl text-xs font-bold text-white transition-colors shadow-lg shadow-[#006B5F]/20"
+                >
+                  {submitting ? "Saving..." : "Save Weight"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
