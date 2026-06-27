@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
-import { CalorieCard } from "@/components/ui/CalorieCard";
+import { motion } from "motion/react";
 import {
   useAppStore,
   selectConsumedKcal,
@@ -19,6 +19,183 @@ function getGreeting(): string {
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   return "Good evening";
+}
+
+// ─── Ring constants ───────────────────────────────────────────────────────────
+const CR_SIZE = 184;
+const CR_STROKE = 15;
+const CR_R = CR_SIZE / 2 - CR_STROKE / 2;
+const CR_C = 2 * Math.PI * CR_R;
+
+const MR_SIZE = 54;
+const MR_STROKE = 5.5;
+const MR_R = MR_SIZE / 2 - MR_STROKE / 2;
+const MR_C = 2 * Math.PI * MR_R;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface MacroData {
+  label: string;
+  value: number;
+  total: number;
+  unit: string;
+  color: string;
+  glow: string;
+}
+
+// ─── CalorieRing ──────────────────────────────────────────────────────────────
+function CalorieRing({
+  remaining,
+  goal,
+  consumed,
+  burned,
+}: {
+  remaining: number;
+  goal: number;
+  consumed: number;
+  burned: number;
+}) {
+  const consumedArc = goal > 0 ? (consumed / goal) * CR_C : 0;
+  const burnedArc = goal > 0 ? (burned / goal) * CR_C : 0;
+
+  return (
+    <div className="relative flex-shrink-0" style={{ width: CR_SIZE, height: CR_SIZE }}>
+      <div
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          inset: CR_STROKE + 8,
+          background: "radial-gradient(circle, rgba(255,173,58,0.07) 0%, transparent 70%)",
+        }}
+      />
+      <svg
+        width={CR_SIZE}
+        height={CR_SIZE}
+        className="absolute inset-0"
+        style={{ transform: "rotate(-90deg)" }}
+      >
+        <defs>
+          <filter id="glow-amber">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="glow-teal">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Track */}
+        <circle
+          cx={CR_SIZE / 2} cy={CR_SIZE / 2} r={CR_R}
+          fill="none"
+          stroke="rgba(255,255,255,0.07)"
+          strokeWidth={CR_STROKE}
+        />
+
+        {/* Burned arc */}
+        <motion.circle
+          cx={CR_SIZE / 2} cy={CR_SIZE / 2} r={CR_R}
+          fill="none"
+          stroke="#2dd4bf"
+          strokeWidth={CR_STROKE - 4}
+          strokeLinecap="round"
+          filter="url(#glow-teal)"
+          strokeDasharray={`${CR_C} ${CR_C}`}
+          initial={{ strokeDashoffset: CR_C }}
+          animate={{ strokeDashoffset: CR_C - burnedArc }}
+          transition={{ duration: 1, ease: [0.4, 0, 0.2, 1], delay: 0.6 }}
+        />
+
+        {/* Consumed arc */}
+        <motion.circle
+          cx={CR_SIZE / 2} cy={CR_SIZE / 2} r={CR_R}
+          fill="none"
+          stroke="#ffad3a"
+          strokeWidth={CR_STROKE}
+          strokeLinecap="round"
+          filter="url(#glow-amber)"
+          strokeDasharray={`${CR_C} ${CR_C}`}
+          initial={{ strokeDashoffset: CR_C }}
+          animate={{ strokeDashoffset: CR_C - consumedArc }}
+          transition={{ duration: 1.3, ease: [0.4, 0, 0.2, 1], delay: 0.3 }}
+        />
+      </svg>
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ pointerEvents: "none" }}>
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "1.4px", textTransform: "uppercase", color: "rgba(255,255,255,0.38)", fontFamily: "Inter, sans-serif" }}>
+          Remaining
+        </span>
+        <span style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-2px", lineHeight: 1.05, color: "#ffffff", fontFamily: "var(--font-headline, sans-serif)" }}>
+          {remaining.toLocaleString()}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.42)", fontFamily: "Inter, sans-serif", marginTop: 1 }}>
+          of {goal.toLocaleString()} kcal
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── MacroRing ────────────────────────────────────────────────────────────────
+function MacroRing({ label, value, total, unit, color, glow, index }: MacroData & { index: number }) {
+  const arc = total > 0 ? (value / total) * MR_C : 0;
+
+  return (
+    <motion.div
+      className="flex items-center gap-3"
+      initial={{ opacity: 0, x: 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.45, ease: "easeOut", delay: 0.35 + index * 0.1 }}
+    >
+      <div className="relative flex-shrink-0" style={{ width: MR_SIZE, height: MR_SIZE }}>
+        <div
+          className="absolute inset-0 rounded-full pointer-events-none"
+          style={{ background: `radial-gradient(circle at center, ${glow} 20%, transparent 70%)` }}
+        />
+        <svg width={MR_SIZE} height={MR_SIZE} className="absolute inset-0" style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={MR_SIZE / 2} cy={MR_SIZE / 2} r={MR_R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={MR_STROKE} />
+          <motion.circle
+            cx={MR_SIZE / 2} cy={MR_SIZE / 2} r={MR_R}
+            fill="none"
+            stroke={color}
+            strokeWidth={MR_STROKE}
+            strokeLinecap="round"
+            strokeDasharray={`${MR_C} ${MR_C}`}
+            initial={{ strokeDashoffset: MR_C }}
+            animate={{ strokeDashoffset: MR_C - arc }}
+            transition={{ duration: 1.1, ease: [0.4, 0, 0.2, 1], delay: 0.5 + index * 0.1 }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#ffffff", fontFamily: "var(--font-headline, sans-serif)", lineHeight: 1 }}>
+            {value}
+          </span>
+          <span style={{ fontSize: 8, fontWeight: 500, color: "rgba(255,255,255,0.32)", fontFamily: "Inter, sans-serif", marginTop: 1 }}>
+            {unit}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px", color, fontFamily: "Inter, sans-serif", lineHeight: 1 }}>
+          {label}
+        </p>
+        <p style={{ fontSize: 11, fontWeight: 600, color: "#ffffff", fontFamily: "var(--font-headline, sans-serif)", lineHeight: 1, marginTop: 2 }}>
+          {value}
+          <span style={{ fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.32)", marginLeft: 2 }}>
+            / {total}{unit}
+          </span>
+        </p>
+        <div style={{ height: 3, width: 64, background: "rgba(255,255,255,0.08)", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
+          <motion.div
+            style={{ height: "100%", background: color, borderRadius: 99 }}
+            initial={{ width: 0 }}
+            animate={{ width: `${total > 0 ? (value / total) * 100 : 0}%` }}
+            transition={{ duration: 1, ease: [0.4, 0, 0.2, 1], delay: 0.6 + index * 0.1 }}
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
 }
 
 function formatDate(d: Date): string {
@@ -134,75 +311,69 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Bento Vitality Metric Card */}
-        <div className="relative w-full h-[260px] flex items-stretch">
-          {/* Main Teal Card */}
-          <div className="relative z-10 w-[56%]">
-            <CalorieCard
-              remaining={remaining}
-              consumed={consumed}
-              burned={0}
-              progress={progress}
-            />
-          </div>
+        {/* Nutrition Card */}
+        <motion.div
+          className="w-full"
+          initial={{ opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
+          style={{ fontFamily: "var(--font-headline, sans-serif)" }}
+        >
+          <div
+            className="relative overflow-hidden"
+            style={{
+              borderRadius: 32,
+              background: "linear-gradient(150deg, #082e2a 0%, #0a4038 35%, #005c4e 70%, #00695c 100%)",
+              boxShadow: "0 40px 80px rgba(0,60,50,0.35), 0 12px 28px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)",
+              padding: "24px 22px 26px",
+            }}
+          >
+            {/* Ambient blobs */}
+            <div className="absolute pointer-events-none" style={{ width: 240, height: 240, top: -100, right: -70, background: "radial-gradient(circle, rgba(255,173,58,0.16) 0%, transparent 65%)" }} />
+            <div className="absolute pointer-events-none" style={{ width: 180, height: 180, bottom: -80, left: -50, background: "radial-gradient(circle, rgba(45,212,191,0.12) 0%, transparent 65%)" }} />
+            <div className="absolute pointer-events-none" style={{ top: 0, left: "10%", right: "10%", height: 1, background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)" }} />
 
-          {/* Macro Mini Cards Container */}
-          <div className="absolute right-0 top-0 bottom-0 w-[50%] flex flex-col justify-between py-1 z-0 gap-[10px] pl-2">
-            {/* Carbs */}
-            <div className="bg-white rounded-[20px] p-3 shadow-sm border border-[#BACAC5]/10 flex-1 ml-auto w-full max-w-[145px] pl-[34px] flex flex-col justify-center gap-1.5">
-              <p className="text-[10px] font-bold text-[#3C4A46] uppercase tracking-wider">
-                Carbs
-              </p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-[18px] font-extrabold text-[#1A1C1C] leading-none">
-                  {consumedCarbs}
-                </span>
-                <span className="text-[11px] font-medium text-[#3C4A46] leading-none">
-                  / {targetCarbsG}g
-                </span>
+            {/* Header */}
+            <div className="flex items-start justify-between mb-6 relative">
+              <div>
+                <p style={{ fontSize: 17, fontWeight: 800, color: "#ffffff", lineHeight: 1, letterSpacing: "-0.3px" }}>
+                  Daily Nutrition
+                </p>
+                <p style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.38)", fontFamily: "Inter, sans-serif", marginTop: 4 }}>
+                  {todayStr}
+                </p>
               </div>
-              <div className="w-full h-[6px] bg-[#F3F3F3] rounded-full overflow-hidden">
-                <div className="h-full bg-[#FFAD3A] rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.round((consumedCarbs / targetCarbsG) * 100))}%` }}></div>
+              <div
+                className="flex items-center gap-1.5 mt-0.5"
+                style={{ background: "rgba(45,212,191,0.12)", border: "1px solid rgba(45,212,191,0.2)", borderRadius: 999, padding: "5px 11px" }}
+              >
+                <div className="rounded-full" style={{ width: 6, height: 6, background: "#2dd4bf", boxShadow: "0 0 6px rgba(45,212,191,0.7)" }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#2dd4bf", fontFamily: "Inter, sans-serif", letterSpacing: "0.2px" }}>
+                  On track
+                </span>
               </div>
             </div>
 
-            {/* Protein */}
-            <div className="bg-white rounded-[20px] p-3 shadow-sm border border-[#BACAC5]/10 flex-1 ml-auto w-full max-w-[145px] pl-[34px] flex flex-col justify-center gap-1.5">
-              <p className="text-[10px] font-bold text-[#3C4A46] uppercase tracking-wider">
-                Protein
-              </p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-[18px] font-extrabold text-[#1A1C1C] leading-none">
-                  {consumedProtein}
-                </span>
-                <span className="text-[11px] font-medium text-[#3C4A46] leading-none">
-                  / {targetProteinG}g
-                </span>
-              </div>
-              <div className="w-full h-[6px] bg-[#F3F3F3] rounded-full overflow-hidden">
-                <div className="h-full bg-[#643E00] rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.round((consumedProtein / targetProteinG) * 100))}%` }}></div>
-              </div>
-            </div>
-
-            {/* Fat */}
-            <div className="bg-white rounded-[20px] p-3 shadow-sm border border-[#BACAC5]/10 flex-1 ml-auto w-full max-w-[145px] pl-[34px] flex flex-col justify-center gap-1.5">
-              <p className="text-[10px] font-bold text-[#3C4A46] uppercase tracking-wider">
-                Fat
-              </p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-[18px] font-extrabold text-[#1A1C1C] leading-none">
-                  {consumedFat}
-                </span>
-                <span className="text-[11px] font-medium text-[#3C4A46] leading-none">
-                  / {targetFatG}g
-                </span>
-              </div>
-              <div className="w-full h-[6px] bg-[#F3F3F3] rounded-full overflow-hidden">
-                <div className="h-full bg-[#005047] rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.round((consumedFat / targetFatG) * 100))}%` }}></div>
+            {/* Ring + Macros */}
+            <div className="flex items-stretch gap-4 relative">
+              <CalorieRing
+                remaining={remaining}
+                goal={targetCalories}
+                consumed={consumed}
+                burned={0}
+              />
+              <div className="flex flex-col justify-between flex-1 min-w-0" style={{ height: CR_SIZE }}>
+                {[
+                  { label: "Carbs",   value: consumedCarbs, total: targetCarbsG, unit: "g", color: "#ffad3a", glow: "rgba(255,173,58,0.25)" },
+                  { label: "Protein", value: consumedProtein,  total: targetProteinG, unit: "g", color: "#2dd4bf", glow: "rgba(45,212,191,0.2)" },
+                  { label: "Fat",     value: consumedFat,  total: targetFatG,  unit: "g", color: "#94a3b8", glow: "rgba(148,163,184,0.2)" },
+                ].map((m, i) => (
+                  <MacroRing key={m.label} {...m} index={i} />
+                ))}
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Quick Actions Scroll */}
         <div>
