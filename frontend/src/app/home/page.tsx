@@ -337,7 +337,7 @@ export default function HomePage() {
             <div className="flex items-start justify-between mb-6 relative">
               <div>
                 <p style={{ fontSize: 17, fontWeight: 800, color: "#ffffff", lineHeight: 1, letterSpacing: "-0.3px" }}>
-                  Daily Nutrition
+                  Health Card
                 </p>
                 <p style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.38)", fontFamily: "Inter, sans-serif", marginTop: 4 }}>
                   {todayStr}
