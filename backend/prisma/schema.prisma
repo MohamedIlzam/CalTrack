@@ -1,16 +1,14 @@
 generator client {
-  provider     = "prisma-client-js"
-  output       = "../generated/prisma"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
-// ─────────────────────────────────────────────
-// ENUMS
-// ─────────────────────────────────────────────
-
+// Enums
 enum Goal {
   LOSE
   MAINTAIN
@@ -31,127 +29,175 @@ enum MealSlot {
   SNACKS
 }
 
-// ─────────────────────────────────────────────
-// USER
-// Stores onboarding data and daily calorie targets.
-// ─────────────────────────────────────────────
+enum ModerationStatus {
+  SUBMITTED
+  VALIDATION_PASSED
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+}
 
+// User Profile
 model User {
+  id             String        @id @default(uuid())
+  email          String        @unique
+  name           String
+  passwordHash   String
+  weightKg       Float?
+  targetWeightKg Float?
+  heightCm       Float?
+  goal           Goal          @default(LOSE)
+  activityLevel  ActivityLevel @default(SEDENTARY)
+  
+  targetCalories Int?
+  targetProteinG Int?
+  targetCarbsG   Int?
+  targetFatG     Int?
+
+  mealLogs       MealLog[]
+  weightEntries  WeightEntry[]
+
+  timezone       String        @default("Asia/Colombo")
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// Regions
+model Region {
+  id       String  @id // e.g. "LK", "US", "GB"
+  name     String
+  currency String  @default("LKR")
+  brands   Brand[]
+  foods    Food[]
+}
+
+// Brands
+model Brand {
+  id        String   @id @default(uuid())
+  name      String
+  regionId  String
+  region    Region   @relation(fields: [regionId], references: [id])
+  foods     Food[]
+  createdAt DateTime @default(now())
+
+  @@unique([name, regionId])
+}
+
+// Master Foods Table
+model Food {
   id              String   @id @default(uuid())
-  email           String   @unique
+  brandId         String?
+  brand           Brand?   @relation(fields: [brandId], references: [id])
+  regionId        String
+  region          Region   @relation(fields: [regionId], references: [id])
   name            String
-  passwordHash    String
+  category        String   // "staples", "curries", "bakery"
+  isVerified      Boolean  @default(false)
+  
+  // Nutrients per 100g/mL
+  caloriesKcal    Float
+  proteinG        Float
+  carbohydratesG  Float
+  fatG            Float
+  saturatedFatG   Float    @default(0.0)
+  fiberG          Float    @default(0.0)
+  sodiumMg        Float    @default(0.0)
+  waterG          Float    @default(0.0)
 
-  // Body metrics
-  weightKg        Float?
-  targetWeightKg  Float?
-  heightCm        Float?
-
-  // Goals & activity
-  goal            Goal          @default(LOSE)
-  activityLevel   ActivityLevel @default(SEDENTARY)
-
-  // Computed targets (stored so the client can read them quickly)
-  targetCalories  Int?
-  targetProteinG  Int?
-  targetCarbsG    Int?
-  targetFatG      Int?
-
-  mealLogs        MealLog[]
-  weightEntries   WeightEntry[]
-
+  aliases         FoodAlias[]
+  unitConversions UnitConversion[]
+  mealLogs        MealLogEntry[]
+  embedding       FoodEmbedding?
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
 
-// ─────────────────────────────────────────────
-// FOOD ITEM
-// Master list of foods (Sri Lankan + generic).
-// ─────────────────────────────────────────────
+// Food Aliases for multilingual search
+model FoodAlias {
+  id           String @id @default(uuid())
+  foodId       String
+  food         Food   @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  aliasName    String
+  languageCode String @default("en") // 'en', 'si', 'ta'
 
-model FoodItem {
-  id          String   @id @default(uuid())
-  name        String   // e.g. "Chicken Kottu"
-  category    String   // e.g. "Rice & Bread", "Curries", "Sides", "Extras" (matches frontend category chips)
-  serving     String   // e.g. "1 portion (approx 400g)", "10 pieces", "100g"
-  
-  // Macronutrients
-  kcal        Float    // Calories
-  proteinG    Float    // Protein in grams
-  carbsG      Float    // Carbs in grams
-  fatG        Float    // Fat in grams
-
-  // Commercial / Scanning Support (Optional but helpful for MVP)
-  brand       String?  // e.g. "Munchee", "Maliban" (null for homemade foods)
-  barcode     String?  @unique // Barcode number (null for homemade foods)
-
-  // Custom User Entries
-  isCustom    Boolean  @default(false) // true = created by user, false = system-wide standard food
-  createdById String?  // ID of the user who created it (null if system food)
-
-  mealLogEntries MealLogEntry[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([name])
+  @@unique([foodId, aliasName])
+  @@index([aliasName])
 }
 
-// ─────────────────────────────────────────────
-// MEAL LOG
-// One MealLog per user per day.
-// ─────────────────────────────────────────────
+// Unit Conversions
+model UnitConversion {
+  id             String  @id @default(uuid())
+  foodId         String
+  food           Food    @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  unitName       String  // e.g. 'piece', 'plate', 'cup'
+  gramEquivalent Float
+  isStandard     Boolean @default(false)
 
+  @@unique([foodId, unitName])
+}
+
+// Vector Embeddings
+model FoodEmbedding {
+  foodId    String                      @id
+  food      Food                        @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  embedding Unsupported("vector(384)")
+}
+
+// Meal Log
 model MealLog {
-  id      String   @id @default(uuid())
-  userId  String
-  date    DateTime @db.Date        // date only, no time component
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime       @db.Date
+  entries   MealLogEntry[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 
-  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entries MealLogEntry[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, date])         // one log per user per day
+  @@unique([userId, date])
 }
 
-// ─────────────────────────────────────────────
-// MEAL LOG ENTRY
-// Each food item added to a meal slot within a day's log.
-// ─────────────────────────────────────────────
-
+// Meal Log Entry
 model MealLogEntry {
-  id         String   @id @default(uuid())
-  mealLogId  String
-  foodItemId String
-  meal       MealSlot
-  quantity   Float    @default(1)  // multiplier on the FoodItem serving
-
-  // Denormalised snapshot — preserves calorie values even if FoodItem changes
-  kcal       Float
-  proteinG   Float
-  carbsG     Float
-  fatG       Float
-
-  mealLog    MealLog  @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
-  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
-
-  createdAt  DateTime @default(now())
+  id                  String   @id @default(uuid())
+  mealLogId           String
+  mealLog             MealLog  @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
+  foodId              String?
+  food                Food?    @relation(fields: [foodId], references: [id], onDelete: SetNull)
+  meal                MealSlot
+  servingQuantity     Float
+  unitName            String
+  loggedWeightGrams   Float
+  
+  // Denormalized macros
+  loggedCaloriesKcal  Float
+  loggedProteinG      Float
+  loggedCarbohydratesG Float
+  loggedFatG          Float
+  
+  createdAt           DateTime @default(now())
 }
 
-// ─────────────────────────────────────────────
-// WEIGHT ENTRY
-// Tracks user weight logs over time.
-// ─────────────────────────────────────────────
+// Moderation Queue for user-submitted foods
+model ModerationQueue {
+  id              String           @id @default(uuid())
+  stagingFoodId   String           // Maps to a temporary JSON or holding table record
+  moderatorId     String?
+  status          ModerationStatus @default(SUBMITTED)
+  rejectionReason String?
+  automatedLogs   String[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
 
+// Weight Entries
 model WeightEntry {
   id         String   @id @default(uuid())
   userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   weightKg   Float
   recordedAt DateTime @default(now())
-
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, recordedAt])
 }
