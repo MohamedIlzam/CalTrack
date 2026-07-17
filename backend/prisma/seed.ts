@@ -1,47 +1,88 @@
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { pipeline } from '@xenova/transformers';
 
 const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL || 'postgresql://myuser:mypassword@localhost:5432/caltrack',
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Password123%40%23%24@localhost:5433/caltrack?schema=public',
 });
 const prisma = new PrismaClient({ adapter });
 
 const sriLankanFoods = [
-  { name: 'Chicken Kottu', category: 'Rice & Bread', serving: '1 portion (approx 400g)', kcal: 850, proteinG: 30, carbsG: 90, fatG: 40, isCustom: false },
-  { name: 'String Hoppers (Indi Appam)', category: 'Rice & Bread', serving: '10 pieces', kcal: 250, proteinG: 4, carbsG: 55, fatG: 1, isCustom: false },
-  { name: 'Hoppers (Appa)', category: 'Rice & Bread', serving: '1 plain hopper', kcal: 90, proteinG: 2, carbsG: 18, fatG: 1, isCustom: false },
-  { name: 'Egg Hopper (Biththara Appa)', category: 'Rice & Bread', serving: '1 egg hopper', kcal: 160, proteinG: 8, carbsG: 18, fatG: 6, isCustom: false },
-  { name: 'Pol Sambol', category: 'Sides', serving: '2 tablespoons', kcal: 100, proteinG: 1, carbsG: 4, fatG: 9, isCustom: false },
-  { name: 'Dhal Curry (Parippu)', category: 'Curries', serving: '1 cup (approx 150g)', kcal: 180, proteinG: 9, carbsG: 25, fatG: 5, isCustom: false },
-  { name: 'Red Rice (Cooked)', category: 'Rice & Bread', serving: '1 cup (approx 160g)', kcal: 200, proteinG: 4, carbsG: 43, fatG: 1, isCustom: false },
-  { name: 'White Rice (Samba)', category: 'Rice & Bread', serving: '1 cup (approx 160g)', kcal: 205, proteinG: 4, carbsG: 45, fatG: 0, isCustom: false },
-  { name: 'Fish Ambul Thiyal', category: 'Curries', serving: '1 piece (approx 50g)', kcal: 80, proteinG: 12, carbsG: 2, fatG: 2, isCustom: false },
-  { name: 'Fish Rolls (Short Eats)', category: 'Extras', serving: '1 roll', kcal: 220, proteinG: 8, carbsG: 20, fatG: 12, isCustom: false },
-  { name: 'Vegetable Roti', category: 'Rice & Bread', serving: '1 roti', kcal: 250, proteinG: 5, carbsG: 40, fatG: 8, isCustom: false },
-  { name: 'Kiri Bath (Milk Rice)', category: 'Rice & Bread', serving: '1 piece (approx 100g)', kcal: 240, proteinG: 4, carbsG: 35, fatG: 9, isCustom: false },
-  { name: 'Lunu Miris', category: 'Sides', serving: '1 tablespoon', kcal: 15, proteinG: 0, carbsG: 3, fatG: 0, isCustom: false },
-  { name: 'Munchee Super Cream Cracker', category: 'Extras', serving: '1 biscuit (approx 8.5g)', kcal: 42, proteinG: 1, carbsG: 6, fatG: 1.5, isCustom: false },
-  { name: 'Milo (RTD Pack)', category: 'Extras', serving: '200ml pack', kcal: 150, proteinG: 4.5, carbsG: 22, fatG: 4, isCustom: false },
-  { name: 'Anchor Full Cream Milk Powder', category: 'Extras', serving: '2 tablespoons (approx 25g)', kcal: 130, proteinG: 6, carbsG: 10, fatG: 7, isCustom: false },
-  { name: 'Samaposha', category: 'Extras', serving: '100g', kcal: 400, proteinG: 14, carbsG: 65, fatG: 8, isCustom: false },
-  { name: 'Koththu Meesi (Chicken)', category: 'Rice & Bread', serving: '1 packet (approx 80g)', kcal: 360, proteinG: 8, carbsG: 50, fatG: 14, isCustom: false },
-  { name: 'Chicken Curry (Sri Lankan)', category: 'Curries', serving: '1 portion (approx 100g)', kcal: 160, proteinG: 15, carbsG: 2, fatG: 10, isCustom: false },
-  { name: 'Malu Paan (Fish Bun)', category: 'Extras', serving: '1 bun', kcal: 240, proteinG: 9, carbsG: 35, fatG: 7, isCustom: false },
-  { name: 'Pittu', category: 'Rice & Bread', serving: '1 piece (approx 100g)', kcal: 210, proteinG: 3, carbsG: 45, fatG: 2, isCustom: false },
-  { name: 'Gotukola Sambol', category: 'Sides', serving: '1/2 cup', kcal: 60, proteinG: 1, carbsG: 3, fatG: 5, isCustom: false },
-  { name: 'Watalappam', category: 'Extras', serving: '1 piece (approx 100g)', kcal: 320, proteinG: 6, carbsG: 40, fatG: 16, isCustom: false },
+  { name: 'Chicken Kottu', category: 'Rice & Bread', unit: 'plate', gramEq: 450, kcal: 850, proteinG: 30, carbsG: 90, fatG: 40 },
+  { name: 'String Hoppers', aliases: ['Indi Appam'], category: 'Rice & Bread', unit: 'piece', gramEq: 25, kcal: 25, proteinG: 0.4, carbsG: 5.5, fatG: 0.1 },
+  { name: 'Hoppers', aliases: ['Appa'], category: 'Rice & Bread', unit: 'piece', gramEq: 45, kcal: 90, proteinG: 2, carbsG: 18, fatG: 1 },
+  { name: 'Egg Hopper', aliases: ['Biththara Appa'], category: 'Rice & Bread', unit: 'piece', gramEq: 85, kcal: 160, proteinG: 8, carbsG: 18, fatG: 6 },
+  { name: 'Pol Sambol', aliases: ['Coconut Sambol'], category: 'Sides', unit: 'tablespoon', gramEq: 15, kcal: 50, proteinG: 0.5, carbsG: 2, fatG: 4.5 },
+  { name: 'Dhal Curry', aliases: ['Parippu', 'Lentil Curry'], category: 'Curries', unit: 'cup', gramEq: 150, kcal: 180, proteinG: 9, carbsG: 25, fatG: 5 },
+  { name: 'Red Rice (Cooked)', category: 'Rice & Bread', unit: 'cup', gramEq: 160, kcal: 200, proteinG: 4, carbsG: 43, fatG: 1 },
+  { name: 'White Rice (Samba)', category: 'Rice & Bread', unit: 'cup', gramEq: 160, kcal: 205, proteinG: 4, carbsG: 45, fatG: 0 },
+  { name: 'Fish Ambul Thiyal', category: 'Curries', unit: 'piece', gramEq: 50, kcal: 80, proteinG: 12, carbsG: 2, fatG: 2 },
+  { name: 'Vegetable Roti', category: 'Rice & Bread', unit: 'piece', gramEq: 80, kcal: 250, proteinG: 5, carbsG: 40, fatG: 8 },
+  { name: 'Kiri Bath', aliases: ['Milk Rice'], category: 'Rice & Bread', unit: 'piece', gramEq: 100, kcal: 240, proteinG: 4, carbsG: 35, fatG: 9 },
+  { name: 'Watalappam', category: 'Extras', unit: 'piece', gramEq: 100, kcal: 320, proteinG: 6, carbsG: 40, fatG: 16 },
 ];
 
 async function main() {
-  console.log('Clearing existing system foods...');
-  await prisma.foodItem.deleteMany({
-    where: { isCustom: false }
+  console.log('Loading AI embedding model (this may take a few seconds on first run)...');
+  // Load the feature extraction pipeline
+  const generateEmbedding = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+
+  console.log('Clearing existing data...');
+  await prisma.food.deleteMany({});
+  await prisma.region.deleteMany({});
+  
+  console.log('Creating LK Region...');
+  const region = await prisma.region.create({
+    data: {
+      id: 'LK',
+      name: 'Sri Lanka',
+      currency: 'LKR',
+    }
   });
 
-  console.log('Seeding Sri Lankan foods...');
-  await prisma.foodItem.createMany({
-    data: sriLankanFoods
-  });
+  console.log('Seeding Sri Lankan foods and generating embeddings...');
+  for (const item of sriLankanFoods) {
+    // Calculate values per 100g to adhere to normalized schema
+    const multiplier = 100 / item.gramEq;
+    
+    const food = await prisma.food.create({
+      data: {
+        regionId: region.id,
+        name: item.name,
+        category: item.category,
+        isVerified: true,
+        caloriesKcal: item.kcal * multiplier,
+        proteinG: item.proteinG * multiplier,
+        carbohydratesG: item.carbsG * multiplier,
+        fatG: item.fatG * multiplier,
+        unitConversions: {
+          create: {
+            unitName: item.unit,
+            gramEquivalent: item.gramEq,
+            isStandard: true
+          }
+        },
+        aliases: item.aliases ? {
+          create: item.aliases.map(alias => ({ aliasName: alias }))
+        } : undefined
+      }
+    });
+
+    // Generate vector embedding based on food name and aliases
+    const searchString = `${item.name} ${item.aliases ? item.aliases.join(' ') : ''}`.toLowerCase();
+    const output = await generateEmbedding(searchString, { pooling: 'mean', normalize: true });
+    
+    // Output is a Float32Array. We need to convert it to a standard array for Prisma/PostgreSQL.
+    const embeddingArray = Array.from(output.data);
+    const embeddingString = JSON.stringify(embeddingArray);
+
+    // Insert the embedding using raw SQL since unsupported types (vector) require it
+    await prisma.$executeRaw`
+      INSERT INTO "FoodEmbedding" ("foodId", "embedding")
+      VALUES (${food.id}::uuid, ${embeddingString}::vector)
+    `;
+    console.log(`- Seeded ${item.name}`);
+  }
 
   console.log('Seeding completed successfully!');
 }

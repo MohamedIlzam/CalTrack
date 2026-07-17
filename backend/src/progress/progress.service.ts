@@ -84,10 +84,10 @@ export class ProgressService {
       });
 
       if (log) {
-        const calories = log.entries.reduce((sum, e) => sum + e.kcal, 0);
-        const protein = log.entries.reduce((sum, e) => sum + e.proteinG, 0);
-        const carbs = log.entries.reduce((sum, e) => sum + e.carbsG, 0);
-        const fat = log.entries.reduce((sum, e) => sum + e.fatG, 0);
+        const calories = log.entries.reduce((sum, e) => sum + e.loggedCaloriesKcal, 0);
+        const protein = log.entries.reduce((sum, e) => sum + e.loggedProteinG, 0);
+        const carbs = log.entries.reduce((sum, e) => sum + e.loggedCarbohydratesG, 0);
+        const fat = log.entries.reduce((sum, e) => sum + e.loggedFatG, 0);
 
         dailyAdherence.push({
           date: dateString,

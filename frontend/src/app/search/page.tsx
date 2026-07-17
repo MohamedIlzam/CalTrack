@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, type MealSlot } from "@/store/useAppStore";
 
@@ -30,7 +31,7 @@ interface AiMessage {
   suggestedFood?: Food;
 }
 
-// ─── Food Database ────────────────────────────────────────────────────────────
+// ─── Food Database (Fallback/Default) ─────────────────────────────────────────
 const FOOD_DB: Food[] = [
   { id: "red-rice",      name: "Red Rice",          kcalPerServing: 120, proteinPerServing: 2.7, carbsPerServing: 26.7, fatPerServing: 0,   emoji: "🍚", chipColor: "#C45C1A",  category: "Rice & Bread" },
   { id: "white-rice",    name: "White Rice",        kcalPerServing: 130, proteinPerServing: 2.4, carbsPerServing: 28.2, fatPerServing: 0.3, emoji: "🍚", chipColor: "#D4A574",  category: "Rice & Bread" },
@@ -64,6 +65,38 @@ const MEAL_LABELS: Record<string, { label: string; emoji: string }> = {
   dinner:   { label: "Dinner",    emoji: "🌙" },
   snack:    { label: "Snack",     emoji: "🍪" },
   saved_meals: { label: "Save as Meal", emoji: "❤️" },
+};
+
+// ─── Live Search Fetcher ──────────────────────────────────────────────────────
+const fetchFoods = async (q: string): Promise<Food[]> => {
+  if (!q.trim()) return [];
+  const token = localStorage.getItem("token");
+  const res = await fetch(`http://localhost:3001/food/search?q=${encodeURIComponent(q)}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Failed to fetch foods");
+  const data = await res.json();
+  
+  return data.map((d: any) => {
+    let emoji = "🍽️";
+    let chipColor = "#2C7A45";
+    if (d.category === "Rice & Bread") { emoji = "🍚"; chipColor = "#C45C1A"; }
+    else if (d.category === "Curries") { emoji = "🍛"; chipColor = "#E8A020"; }
+    else if (d.category === "Sides") { emoji = "🥗"; chipColor = "#2C7A45"; }
+    else if (d.category === "Extras") { emoji = "🥚"; chipColor = "#F4D03F"; }
+    
+    return {
+      id: d.id,
+      name: d.name,
+      kcalPerServing: d.caloriesKcal,
+      proteinPerServing: d.proteinG,
+      carbsPerServing: d.carbohydratesG,
+      fatPerServing: d.fatG,
+      emoji,
+      chipColor,
+      category: d.category,
+    };
+  });
 };
 
 // ─── Mock AI ingredient generator ─────────────────────────────────────────────
@@ -161,6 +194,13 @@ function SearchContent() {
   const aiInputRef = useRef<HTMLInputElement>(null);
   const aiScrollRef = useRef<HTMLDivElement>(null);
 
+  // ── React Query ──────────────────────────────────────────────────────────────
+  const { data: searchedFoods = [], isFetching } = useQuery({
+    queryKey: ['foods', searchQuery],
+    queryFn: () => fetchFoods(searchQuery),
+    enabled: !!searchQuery.trim(),
+  });
+
   // ── Effects ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -181,10 +221,10 @@ function SearchContent() {
 
   // ── Search / filter ──────────────────────────────────────────────────────────
   const isDefaultEmpty = !searchQuery.trim() && activeCategory === "All";
-  const displayedFoods = isDefaultEmpty
-    ? []
-    : searchQuery.trim()
-      ? FOOD_DB.filter((f) => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const displayedFoods = searchQuery.trim() 
+    ? searchedFoods 
+    : isDefaultEmpty
+      ? []
       : FOOD_DB.filter((f) => f.category === activeCategory);
 
   // ── Plate helpers ────────────────────────────────────────────────────────────

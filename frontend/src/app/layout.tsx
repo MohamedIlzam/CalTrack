@@ -32,6 +32,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
+import Providers from "./providers";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -41,8 +43,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}>
       <body className="flex justify-center min-h-[100dvh] bg-gray-100">
         <main className="w-full max-w-md bg-surface min-h-[100dvh] shadow-2xl relative flex flex-col overflow-x-hidden overflow-y-auto border-x border-gray-200 safe-area-inset">
-          {children}
+          <Providers>{children}</Providers>
         </main>
+
       </body>
     </html>
   );
