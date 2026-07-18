@@ -71,7 +71,8 @@ const MEAL_LABELS: Record<string, { label: string; emoji: string }> = {
 const fetchFoods = async (q: string): Promise<Food[]> => {
   if (!q.trim()) return [];
   const token = localStorage.getItem("token");
-  const res = await fetch(`http://localhost:3001/food/search?q=${encodeURIComponent(q)}`, {
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const res = await fetch(`http://${hostname}:3001/food/search?q=${encodeURIComponent(q)}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!res.ok) throw new Error("Failed to fetch foods");
