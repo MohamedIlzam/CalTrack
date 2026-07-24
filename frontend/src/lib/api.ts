@@ -1,3 +1,5 @@
+import { useAppStore } from "@/store/useAppStore";
+
 export function getBackendHost(): string {
   if (typeof window !== "undefined") {
     return window.location.hostname;
@@ -7,7 +9,24 @@ export function getBackendHost(): string {
 
 export function getAuthToken(): string | null {
   if (typeof window !== "undefined") {
-    return localStorage.getItem("token");
+    // 1. Memory token from Zustand store
+    const storeToken = useAppStore.getState().token;
+    if (storeToken) return storeToken;
+
+    // 2. Direct key fallback
+    const localToken = localStorage.getItem("token");
+    if (localToken) return localToken;
+
+    // 3. Fallback to persisted caltrack-storage
+    try {
+      const storage = localStorage.getItem("caltrack-storage");
+      if (storage) {
+        const parsed = JSON.parse(storage);
+        if (parsed?.state?.token) return parsed.state.token;
+      }
+    } catch (e) {
+      // ignore JSON parse error
+    }
   }
   return null;
 }
