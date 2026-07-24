@@ -57,8 +57,11 @@ export function Step6Auth({ onBack, initialMode = "register" }: Props) {
         throw new Error(data.message || `Failed to ${mode}`);
       }
 
-      // Save credentials & onboarding data in Zustand, redirect home
+      // Save credentials & onboarding data in Zustand and localStorage, redirect home
       setAuth(data.accessToken, data.user);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("token", data.accessToken);
+      }
       router.push("/home");
     } catch (err: any) {
       setError(err.message || "Something went wrong. Please try again.");

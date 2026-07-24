@@ -12,7 +12,7 @@ import {
   type MealSlot,
   type FoodEntry,
 } from "@/store/useAppStore";
-import { fetchDailyLog, deleteMealEntry } from "@/lib/api";
+import { fetchDailyLog, deleteMealEntry, getAuthToken } from "@/lib/api";
 
 /* ─── Helpers ─── */
 
@@ -230,6 +230,7 @@ const MEAL_EMPTY_CTA: Record<MealSlot, { text: string; question: string }> = {
 
 export default function HomePage() {
   const router = useRouter();
+  const logout = useAppStore((s) => s.logout);
   const name = useAppStore((s) => s.name);
   const targetCalories = useAppStore((s) => s.targetCalories) || 1850;
   const targetCarbsG = useAppStore((s) => s.targetCarbsG) || 250;
@@ -239,6 +240,20 @@ export default function HomePage() {
   const consumedCarbs = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.carbs, 0));
   const consumedProtein = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.protein, 0));
   const consumedFat = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.fat, 0));
+
+  useEffect(() => {
+    if (!getAuthToken()) {
+      router.replace("/");
+    }
+  }, [router]);
+
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+    }
+    logout();
+    router.replace("/");
+  };
 
   /* useShallow prevents infinite loops — .filter() returns new array refs each call */
   const breakfastEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "breakfast")));
@@ -335,16 +350,18 @@ export default function HomePage() {
           </div>
         </div>
 
-        <button className="text-gray-500 w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleLogout}
+            title="Log Out"
+            className="text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Log Out</span>
+          </button>
+        </div>
       </header>
 
       <main className="px-6 pt-5 flex flex-col gap-6">
