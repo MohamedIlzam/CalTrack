@@ -235,92 +235,83 @@ function GreenishMealCard({
   mealIcon: string;
   onDelete: (id: string) => void;
 }) {
-  const hasIngredients = entry.ingredients && entry.ingredients.length > 0;
+  const items = entry.ingredients && entry.ingredients.length > 0
+    ? entry.ingredients.map(ing => ({
+        id: ing.id,
+        name: ing.name,
+        qty: ing.qty,
+        emoji: mealIcon,
+      }))
+    : [{
+        id: entry.id,
+        name: entry.name,
+        qty: 1,
+        emoji: mealIcon,
+      }];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-[22px] p-4 text-white shadow-md transition-all mb-2"
-      style={{
-        background: "linear-gradient(135deg, #004B40 0%, #006B5F 55%, #0D9488 100%)",
-        boxShadow: "0 10px 25px rgba(0,107,95,0.22), inset 0 1px 0 rgba(255,255,255,0.15)",
-      }}
-    >
-      {/* Subtle ambient glow */}
-      <div
-        className="absolute -right-8 -top-8 w-28 h-28 rounded-full pointer-events-none"
-        style={{ background: "radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%)" }}
-      />
+    <div className="relative mb-3 group">
+      {/* Delete button at top right */}
+      <button
+        onClick={() => onDelete(entry.id)}
+        title="Delete Meal"
+        className="absolute -top-2 -right-2 z-20 w-7 h-7 rounded-full bg-red-500 text-white shadow-md flex items-center justify-center opacity-90 hover:opacity-100 hover:scale-110 active:scale-95 transition-all"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
 
-      {/* Top row */}
-      <div className="flex items-start justify-between gap-3 relative z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center text-xl flex-shrink-0 border border-white/10">
-            {mealIcon}
-          </div>
-          <div className="min-w-0">
-            <h4 className="text-[15px] font-extrabold text-white tracking-tight leading-tight truncate">
-              {entry.name}
-            </h4>
-            <p className="text-[11px] font-medium text-white/70 tracking-wide mt-0.5">
-              {entry.serving}
+      {/* Exact Greenish Plate Card matching Search Page */}
+      <div 
+        className="flex-none shadow-[0_10px_40px_rgba(0,107,95,0.2)] rounded-[26px] p-4 flex gap-[14px] overflow-hidden relative"
+        style={{
+          background: "linear-gradient(135deg, rgba(0,68,57,0.95) 0%, rgba(0,121,107,0.95) 50%, rgba(20,184,166,0.92) 100%)",
+          backdropFilter: "blur(12px)"
+        }}
+      >
+        {/* Left Side: Stats */}
+        <div className="w-[42%] flex flex-col justify-center border-r border-white/20 pr-3 relative">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/60 mb-1 leading-none">Total</p>
+            <p className="text-[34px] font-extrabold text-white tracking-[-1px] leading-none flex items-baseline gap-[2px]">
+              {entry.kcal}<span className="text-[14px] font-semibold opacity-75">kcal</span>
             </p>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[16px] font-black text-white tracking-tight">
-            {entry.kcal} <span className="text-[11px] font-semibold text-white/80">kcal</span>
-          </span>
-          <button
-            onClick={() => onDelete(entry.id)}
-            title="Delete Meal"
-            className="w-7 h-7 rounded-full bg-white/10 hover:bg-red-500/80 active:scale-90 transition-all flex items-center justify-center text-white/70 hover:text-white"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Macro pills */}
-      <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-white/10 relative z-10">
-        <div className="flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full text-[11px] font-bold">
-          <span className="text-[#FFAD3A]">P:</span>
-          <span>{entry.protein}g</span>
-        </div>
-        <div className="flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full text-[11px] font-bold">
-          <span className="text-[#2DD4BF]">C:</span>
-          <span>{entry.carbs}g</span>
-        </div>
-        <div className="flex items-center gap-1 bg-black/20 px-2.5 py-1 rounded-full text-[11px] font-bold">
-          <span className="text-white/60">F:</span>
-          <span>{entry.fat}g</span>
-        </div>
-      </div>
-
-      {/* Ingredients list */}
-      {hasIngredients && (
-        <div className="mt-3 bg-black/20 rounded-xl p-2.5 relative z-10 border border-white/5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-white/60 mb-1.5">
-            Ingredients ({entry.ingredients!.length})
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {entry.ingredients!.map((ing, idx) => (
-              <span
-                key={idx}
-                className="inline-flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white/90"
-              >
-                <span>{ing.name}</span>
-                <span className="text-white/50 text-[10px] font-bold">x{ing.qty}</span>
-              </span>
+          <div className="flex justify-between mt-4 pr-1">
+            {[
+              { label: "P", val: entry.protein },
+              { label: "C", val: entry.carbs },
+              { label: "F", val: entry.fat }
+            ].map(({ label, val }) => (
+              <div key={label} className="flex flex-col items-start gap-[1px]">
+                <p className="text-[9px] font-bold text-white/50 leading-none">{label}</p>
+                <p className="text-[13px] font-extrabold text-white leading-none">
+                  {val}<span className="text-[9px] font-normal opacity-75 ml-[1px]">g</span>
+                </p>
+              </div>
             ))}
           </div>
         </div>
-      )}
-    </motion.div>
+
+        {/* Right Side: Plate Items (Read-only scrollable list) */}
+        <div className="w-[58%] flex flex-col gap-[6px] max-h-[125px] overflow-y-auto no-scrollbar pl-1">
+          {items.map((item) => (
+            <div key={item.id} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px]" style={{ background: "rgba(255,255,255,0.12)" }}>
+              <span className="text-[18px] leading-none">{item.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-bold text-white truncate leading-tight">{item.name}</p>
+                <p className="text-[10px] text-white/60 truncate mt-[1px] tracking-wide">{item.qty} {item.qty === 1 ? 'srv' : 'srvs'}</p>
+              </div>
+              {/* Static Read-only Quantity Badge */}
+              <div className="bg-black/20 rounded-full px-2 py-0.5 select-none">
+                <span className="text-[11px] font-bold text-white/90 tabular-nums">x{item.qty}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
