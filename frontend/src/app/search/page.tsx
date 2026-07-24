@@ -288,14 +288,14 @@ function SearchContent() {
     else if (selectedMeal === 'dinner') apiMeal = 'DINNER';
     else if (selectedMeal === 'snack' || selectedMeal === 'snacks') apiMeal = 'SNACKS';
 
-    for (const item of plateItems) {
+    if (plateItems.length === 1) {
+      const item = plateItems[0];
       const kcal = Math.round(item.kcalPerServing * item.qty);
       const carbs = Math.round(item.carbsPerServing * item.qty);
       const protein = Math.round(item.proteinPerServing * item.qty);
       const fat = Math.round(item.fatPerServing * item.qty);
       const servingStr = item.qty === 1 ? "1 serving" : `${item.qty} servings`;
 
-      // 1. Optimistic UI update
       addFoodEntry({
         id: `${Date.now()}-${Math.random()}-${item.id}`,
         meal: selectedMeal,
@@ -305,9 +305,9 @@ function SearchContent() {
         protein,
         fat,
         serving: servingStr,
+        ingredients: [{ id: item.id, name: item.name, qty: item.qty }],
       });
 
-      // 2. Persist to PostgreSQL backend via NestJS API
       try {
         await postLogMeal({
           date: dateStr,
@@ -315,11 +315,43 @@ function SearchContent() {
           meal: apiMeal,
           servingQuantity: item.qty,
           unitName: servingStr,
-          loggedWeightGrams: item.qty * 100, // default 100g base per serving
+          loggedWeightGrams: item.qty * 100,
           loggedCaloriesKcal: kcal,
           loggedProteinG: protein,
           loggedCarbohydratesG: carbs,
           loggedFatG: fat,
+        });
+      } catch (err) {
+        console.error("Failed to persist meal log to backend:", err);
+      }
+    } else if (plateItems.length > 1) {
+      const comboName = plateItems.map(i => i.name).join(", ");
+      const servingStr = `${plateItems.length} items`;
+      const ingredients = plateItems.map(i => ({ id: i.id, name: i.name, qty: i.qty }));
+
+      addFoodEntry({
+        id: `${Date.now()}-${Math.random()}`,
+        meal: selectedMeal,
+        name: comboName,
+        kcal: totalKcal,
+        carbs: totalCarbs,
+        protein: totalProtein,
+        fat: totalFat,
+        serving: servingStr,
+        ingredients,
+      });
+
+      try {
+        await postLogMeal({
+          date: dateStr,
+          meal: apiMeal,
+          servingQuantity: 1,
+          unitName: servingStr,
+          loggedWeightGrams: plateItems.length * 100,
+          loggedCaloriesKcal: totalKcal,
+          loggedProteinG: totalProtein,
+          loggedCarbohydratesG: totalCarbs,
+          loggedFatG: totalFat,
         });
       } catch (err) {
         console.error("Failed to persist meal log to backend:", err);
