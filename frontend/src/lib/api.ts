@@ -104,6 +104,14 @@ export async function postLogMeal(payload: LogMealPayload): Promise<ApiMealLogEn
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
     console.error('postLogMeal error response:', errorData);
+
+    if (res.status === 401) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+      }
+      useAppStore.getState().logout();
+    }
+
     throw new Error(errorData.message || 'Failed to log meal entry');
   }
 
