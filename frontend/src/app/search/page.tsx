@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, type MealSlot } from "@/store/useAppStore";
+import { postLogMeal } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Food {
@@ -71,7 +72,8 @@ const MEAL_LABELS: Record<string, { label: string; emoji: string }> = {
 const fetchFoods = async (q: string): Promise<Food[]> => {
   if (!q.trim()) return [];
   const token = localStorage.getItem("token");
-  const res = await fetch(`http://localhost:3001/food/search?q=${encodeURIComponent(q)}`, {
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const res = await fetch(`http://${hostname}:3001/food/search?q=${encodeURIComponent(q)}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!res.ok) throw new Error("Failed to fetch foods");
@@ -252,9 +254,10 @@ function SearchContent() {
   const totalProtein = Math.round(plateItems.reduce((s, i) => s + i.proteinPerServing * i.qty, 0));
   const totalCarbs   = Math.round(plateItems.reduce((s, i) => s + i.carbsPerServing * i.qty, 0));
   const totalFat     = Math.round(plateItems.reduce((s, i) => s + i.fatPerServing * i.qty, 0));
-
   // ── Save meal ────────────────────────────────────────────────────────────────
-  function handleSaveMeal() {
+  async function handleSaveMeal() {
+    const dateStr = new Date().toISOString().split("T")[0];
+
     if (selectedMeal === "saved_meals") {
       if (!savedMealName.trim()) {
         document.getElementById("savedMealNameInput")?.focus();
@@ -279,18 +282,50 @@ function SearchContent() {
       return;
     }
 
-    plateItems.forEach((item) => {
+    // Map UI meal slot to backend enum
+    let apiMeal: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACKS' = 'BREAKFAST';
+    if (selectedMeal === 'lunch') apiMeal = 'LUNCH';
+    else if (selectedMeal === 'dinner') apiMeal = 'DINNER';
+    else if (selectedMeal === 'snack' || selectedMeal === 'snacks') apiMeal = 'SNACKS';
+
+    for (const item of plateItems) {
+      const kcal = Math.round(item.kcalPerServing * item.qty);
+      const carbs = Math.round(item.carbsPerServing * item.qty);
+      const protein = Math.round(item.proteinPerServing * item.qty);
+      const fat = Math.round(item.fatPerServing * item.qty);
+      const servingStr = item.qty === 1 ? "1 serving" : `${item.qty} servings`;
+
+      // 1. Optimistic UI update
       addFoodEntry({
         id: `${Date.now()}-${Math.random()}-${item.id}`,
         meal: selectedMeal,
         name: item.name,
-        kcal: Math.round(item.kcalPerServing * item.qty),
-        carbs: Math.round(item.carbsPerServing * item.qty),
-        protein: Math.round(item.proteinPerServing * item.qty),
-        fat: Math.round(item.fatPerServing * item.qty),
-        serving: item.qty === 1 ? "1 serving" : `${item.qty} servings`,
+        kcal,
+        carbs,
+        protein,
+        fat,
+        serving: servingStr,
       });
-    });
+
+      // 2. Persist to PostgreSQL backend via NestJS API
+      try {
+        await postLogMeal({
+          date: dateStr,
+          foodId: item.id.startsWith('ai-') ? undefined : item.id,
+          meal: apiMeal,
+          servingQuantity: item.qty,
+          unitName: servingStr,
+          loggedWeightGrams: item.qty * 100, // default 100g base per serving
+          loggedCaloriesKcal: kcal,
+          loggedProteinG: protein,
+          loggedCarbohydratesG: carbs,
+          loggedFatG: fat,
+        });
+      } catch (err) {
+        console.error("Failed to persist meal log to backend:", err);
+      }
+    }
+
     router.push("/home");
   }
 

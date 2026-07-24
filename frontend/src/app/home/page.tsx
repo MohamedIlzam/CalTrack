@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
+import { useQuery } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { motion } from "motion/react";
 import {
@@ -11,6 +12,7 @@ import {
   type MealSlot,
   type FoodEntry,
 } from "@/store/useAppStore";
+import { fetchDailyLog, deleteMealEntry } from "@/lib/api";
 
 /* ─── Helpers ─── */
 
@@ -253,6 +255,51 @@ export default function HomePage() {
 
   const [showSavedMeals, setShowSavedMeals] = useState(false);
   const [expandedMealId, setExpandedMealId] = useState<string | null>(null);
+
+  const dateIso = useMemo(() => new Date().toISOString().split("T")[0], []);
+
+  const { data: dailyLog } = useQuery({
+    queryKey: ['dailyLog', dateIso],
+    queryFn: () => fetchDailyLog(dateIso),
+  });
+
+  useEffect(() => {
+    if (dailyLog && dailyLog.entries) {
+      const apiEntries: FoodEntry[] = dailyLog.entries.map((e) => {
+        let mealSlot: MealSlot = 'breakfast';
+        const m = e.meal.toLowerCase();
+        if (m === 'lunch') mealSlot = 'lunch';
+        else if (m === 'dinner') mealSlot = 'dinner';
+        else if (m === 'snacks' || m === 'snack') mealSlot = 'snacks';
+
+        return {
+          id: e.id,
+          name: e.food?.name || `${e.meal} Item`,
+          kcal: Math.round(e.loggedCaloriesKcal),
+          carbs: Math.round(e.loggedCarbohydratesG),
+          protein: Math.round(e.loggedProteinG),
+          fat: Math.round(e.loggedFatG),
+          serving: e.unitName,
+          meal: mealSlot,
+        };
+      });
+
+      const storeEntries = useAppStore.getState().entries;
+      const savedEntries = storeEntries.filter(e => e.meal === 'saved_meals');
+      useAppStore.setState({ entries: [...savedEntries, ...apiEntries] });
+    }
+  }, [dailyLog]);
+
+  const handleDeleteEntry = async (id: string) => {
+    removeFoodEntry(id);
+    try {
+      if (!id.startsWith('saved-')) {
+        await deleteMealEntry(id);
+      }
+    } catch (err) {
+      console.error('Failed to delete meal entry from backend:', err);
+    }
+  };
 
   const remaining = Math.max(0, targetCalories - consumed);
   const progress = targetCalories > 0 ? consumed / targetCalories : 0;
@@ -599,7 +646,7 @@ export default function HomePage() {
                         <div className="flex items-center gap-2">
                           <span className="text-[14px] font-bold text-[#3C4A46]">{entry.kcal}</span>
                           <button
-                            onClick={() => removeFoodEntry(entry.id)}
+                            onClick={() => handleDeleteEntry(entry.id)}
                             className="w-6 h-6 rounded-full flex items-center justify-center text-[#3C4A46]/30 hover:text-red-400 hover:bg-red-50 transition-colors"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
