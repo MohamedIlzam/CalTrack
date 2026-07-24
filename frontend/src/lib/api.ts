@@ -83,7 +83,9 @@ export async function postLogMeal(payload: LogMealPayload): Promise<ApiMealLogEn
   });
 
   if (!res.ok) {
-    throw new Error('Failed to log meal entry');
+    const errorData = await res.json().catch(() => ({ message: res.statusText }));
+    console.error('postLogMeal error response:', errorData);
+    throw new Error(errorData.message || 'Failed to log meal entry');
   }
 
   return res.json();

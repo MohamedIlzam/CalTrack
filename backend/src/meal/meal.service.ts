@@ -86,11 +86,27 @@ export class MealService {
       });
     }
 
-    // 2. Create the entry
+    // 2. Safely verify if foodId exists in PostgreSQL to avoid foreign key constraints
+    let validFoodId: string | null = null;
+    if (dto.foodId) {
+      try {
+        const existingFood = await this.prisma.food.findUnique({
+          where: { id: dto.foodId },
+        });
+        if (existingFood) {
+          validFoodId = existingFood.id;
+        }
+      } catch (err) {
+        // If dto.foodId is not a valid UUID string, Prisma/Postgres throws an error
+        validFoodId = null;
+      }
+    }
+
+    // 3. Create the entry
     return this.prisma.mealLogEntry.create({
       data: {
         mealLogId: mealLog.id,
-        foodId: dto.foodId || null,
+        foodId: validFoodId,
         meal: dto.meal,
         servingQuantity: dto.servingQuantity,
         unitName: dto.unitName,
