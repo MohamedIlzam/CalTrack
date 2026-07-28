@@ -133,3 +133,74 @@ export async function deleteMealEntry(id: string): Promise<void> {
     throw new Error('Failed to delete meal entry');
   }
 }
+
+export interface WeightEntry {
+  id: string;
+  userId: string;
+  weightKg: number;
+  recordedAt: string;
+}
+
+export interface AdherenceDay {
+  date: string;
+  logged: boolean;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export async function fetchWeightHistory(): Promise<WeightEntry[]> {
+  const token = getAuthToken();
+  if (!token) return [];
+
+  const host = getBackendHost();
+  const res = await fetch(`http://${host}:3001/progress/weight`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    if (res.status === 401) return [];
+    throw new Error('Failed to fetch weight history');
+  }
+
+  return res.json();
+}
+
+export async function postWeightLog(weightKg: number): Promise<WeightEntry> {
+  const token = getAuthToken();
+  const host = getBackendHost();
+
+  const res = await fetch(`http://${host}:3001/progress/weight`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ weightKg }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(errorData.message || 'Failed to log weight');
+  }
+
+  return res.json();
+}
+
+export async function fetchAdherence(days: number = 7): Promise<AdherenceDay[]> {
+  const token = getAuthToken();
+  if (!token) return [];
+
+  const host = getBackendHost();
+  const res = await fetch(`http://${host}:3001/progress/adherence?days=${days}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    if (res.status === 401) return [];
+    throw new Error('Failed to fetch adherence data');
+  }
+
+  return res.json();
+}

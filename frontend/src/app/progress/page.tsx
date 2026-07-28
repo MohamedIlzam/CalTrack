@@ -1,21 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, selectConsumedKcal } from "@/store/useAppStore";
-
-interface WeightEntry {
-  id: string;
-  weightKg: number;
-  recordedAt: string;
-}
+import {
+  fetchWeightHistory,
+  postWeightLog,
+  fetchAdherence,
+  type WeightEntry,
+  type AdherenceDay,
+  getAuthToken,
+} from "@/lib/api";
 
 export default function ProgressPage() {
+  const queryClient = useQueryClient();
   const weightKg = useAppStore(s => s.weightKg) || 68.3;
   const targetWeightKg = useAppStore(s => s.targetWeightKg) || 66.0;
   const heightCm = useAppStore(s => s.heightCm) || 168;
   const targetCalories = useAppStore(s => s.targetCalories) || 1850;
-  const token = useAppStore(s => s.token);
   const setOnboarding = useAppStore(s => s.setOnboarding);
   
   const consumed = useAppStore(selectConsumedKcal);
@@ -28,38 +31,24 @@ export default function ProgressPage() {
   // State to track the active macro filter in the Macro Trends section
   const [activeMacro, setActiveMacro] = useState<"carbs" | "protein" | "fat">("carbs");
 
-  // Weight history state
-  const [weightHistory, setWeightHistory] = useState<WeightEntry[]>([]);
+  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [weightInput, setWeightInput] = useState(weightKg.toString());
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
-  const getApiUrl = (path: string) => {
-    const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
-    return `http://${hostname}:3001${path}`;
-  };
+  // 1. Live Weight History Query
+  const { data: weightHistory = [] } = useQuery<WeightEntry[]>({
+    queryKey: ['weightHistory'],
+    queryFn: fetchWeightHistory,
+  });
 
-  const fetchWeightHistory = async () => {
-    if (!token) return;
-    try {
-      const response = await fetch(getApiUrl("/progress/weight"), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setWeightHistory(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch weight history", err);
-    }
-  };
-
-  useEffect(() => {
-    fetchWeightHistory();
-  }, [token]);
+  // 2. Live Adherence Query
+  const daysLimit = caloriePeriod === "month" ? 30 : 7;
+  const { data: adherenceDays = [] } = useQuery<AdherenceDay[]>({
+    queryKey: ['adherence', daysLimit],
+    queryFn: () => fetchAdherence(daysLimit),
+  });
 
   // Synchronize input when weightKg changes
   useEffect(() => {
@@ -76,20 +65,9 @@ export default function ProgressPage() {
     setSubmitting(true);
     setModalError(null);
     try {
-      const response = await fetch(getApiUrl("/progress/weight"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ weightKg: val }),
-      });
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.message || "Failed to save weight entry");
-      }
+      await postWeightLog(val);
       setOnboarding({ weightKg: val });
-      await fetchWeightHistory();
+      queryClient.invalidateQueries({ queryKey: ['weightHistory'] });
       setIsModalOpen(false);
     } catch (err: any) {
       setModalError(err.message || "Something went wrong.");
@@ -100,93 +78,124 @@ export default function ProgressPage() {
 
   const diff = Math.abs(weightKg - targetWeightKg).toFixed(1);
 
+  // Dynamic adherence calculations from backend log data
+  const { todayKcal, yesterdayKcal, avg7Days, avgMonth } = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+
+    const todayDay = adherenceDays.find(d => d.date === todayStr);
+    const yesterdayDay = adherenceDays.find(d => d.date === yesterdayStr);
+
+    const tKcal = todayDay && todayDay.logged ? todayDay.calories : consumed;
+    const yKcal = yesterdayDay && yesterdayDay.logged ? yesterdayDay.calories : 0;
+
+    const logged7 = adherenceDays.filter(d => d.logged);
+    const sum7 = logged7.reduce((sum, d) => sum + d.calories, 0);
+    const a7 = logged7.length > 0 ? Math.round(sum7 / logged7.length) : consumed;
+
+    const sumMonth = adherenceDays.reduce((sum, d) => sum + d.calories, 0);
+    const aMonth = adherenceDays.length > 0 ? Math.round(sumMonth / adherenceDays.length) : consumed;
+
+    return {
+      todayKcal: tKcal,
+      yesterdayKcal: yKcal,
+      avg7Days: a7,
+      avgMonth: aMonth,
+    };
+  }, [adherenceDays, consumed]);
+
   const caloriePeriodData = {
     today: {
       label: "Consumed Today",
-      kcal: consumed,
+      kcal: todayKcal,
     },
     yesterday: {
       label: "Consumed Yesterday",
-      kcal: 1920,
+      kcal: yesterdayKcal,
     },
     "7days": {
       label: "7-Day Average",
-      kcal: Math.round((1920 + 2100 + consumed + 1780 + 2150 + 2400 + 1400) / 7),
+      kcal: avg7Days,
     },
     month: {
       label: "Monthly Average",
-      kcal: 1810,
+      kcal: avgMonth,
     }
   };
 
-  const calorieChartData = {
-    today: [
-      { label: "B", kcal: Math.round(consumed * 0.25), height: "25%", color: "bg-primary" },
-      { label: "L", kcal: Math.round(consumed * 0.45), height: "45%", color: "bg-primary" },
-      { label: "D", kcal: Math.round(consumed * 0.20), height: "20%", color: "bg-primary" },
-      { label: "S", kcal: Math.round(consumed * 0.10), height: "10%", color: "bg-primary" },
-    ],
-    yesterday: [
-      { label: "B", kcal: 420, height: "35%", color: "bg-primary/40" },
-      { label: "L", kcal: 880, height: "70%", color: "bg-primary/40" },
-      { label: "D", kcal: 500, height: "50%", color: "bg-primary" },
-      { label: "S", kcal: 120, height: "15%", color: "bg-primary/40" },
-    ],
-    "7days": [
-      { label: "M", kcal: 1920, height: "85%", color: "bg-primary/30" },
-      { label: "T", kcal: 2100, height: "90%", color: "bg-primary/30" },
-      { label: "W", kcal: consumed, height: `${Math.min(100, Math.round((consumed / targetCalories) * 100))}%`, color: consumed > targetCalories ? "bg-error/40" : "bg-primary" },
-      { label: "T", kcal: 1780, height: "80%", color: "bg-primary/30" },
-      { label: "F", kcal: 2150, height: "95%", color: "bg-primary/30" },
-      { label: "S", kcal: 2400, height: "100%", color: "bg-error/40" },
-      { label: "S", kcal: 1400, height: "60%", color: "bg-primary/30" },
-    ],
-    month: [
-      { label: "W1", kcal: 1820, height: "80%", color: "bg-primary/30" },
-      { label: "W2", kcal: 1910, height: "85%", color: "bg-primary/30" },
-      { label: "W3", kcal: 1740, height: "75%", color: "bg-primary" },
-      { label: "W4", kcal: 1880, height: "82%", color: "bg-primary/30" },
-    ]
-  };
+  const calorieChartData = useMemo(() => {
+    const days = adherenceDays.slice(-7);
+    const defaultBars = [
+      { label: "M", kcal: 0, height: "15%", color: "bg-primary/30" },
+      { label: "T", kcal: 0, height: "15%", color: "bg-primary/30" },
+      { label: "W", kcal: 0, height: "15%", color: "bg-primary/30" },
+      { label: "T", kcal: 0, height: "15%", color: "bg-primary/30" },
+      { label: "F", kcal: 0, height: "15%", color: "bg-primary/30" },
+      { label: "S", kcal: 0, height: "15%", color: "bg-primary/30" },
+      { label: "S", kcal: 0, height: "15%", color: "bg-primary/30" },
+    ];
 
-  const macroChartData = {
-    carbs: {
-      description: "Carbohydrate intake peaked on Saturday due to larger portions of rice.",
-      bars: [
-        { label: "Mon", height: "60%" },
-        { label: "Tue", height: "70%" },
-        { label: "Wed", height: "55%" },
-        { label: "Thu", height: "80%" },
-        { label: "Fri", height: "65%" },
-        { label: "Sat", height: "90%" },
-        { label: "Sun", height: "75%" },
-      ]
-    },
-    protein: {
-      description: "Protein intake was highest on Sunday, driven by chicken curry and egg hoppers.",
-      bars: [
-        { label: "Mon", height: "75%" },
-        { label: "Tue", height: "60%" },
-        { label: "Wed", height: "80%" },
-        { label: "Thu", height: "70%" },
-        { label: "Fri", height: "85%" },
-        { label: "Sat", height: "65%" },
-        { label: "Sun", height: "90%" },
-      ]
-    },
-    fat: {
-      description: "Fat intake spiked on Thursday, mostly from short eats and coconut-based curries.",
-      bars: [
-        { label: "Mon", height: "50%" },
-        { label: "Tue", height: "55%" },
-        { label: "Wed", height: "45%" },
-        { label: "Thu", height: "85%" },
-        { label: "Fri", height: "60%" },
-        { label: "Sat", height: "75%" },
-        { label: "Sun", height: "50%" },
-      ]
-    }
-  };
+    if (days.length === 0) return { today: [], yesterday: [], "7days": defaultBars, month: [] };
+
+    const dynamicBars = days.map((d) => {
+      const dayName = new Date(d.date).toLocaleDateString("en-US", { weekday: "narrow" });
+      const hPct = targetCalories > 0 ? Math.min(100, Math.max(10, Math.round((d.calories / targetCalories) * 100))) : 15;
+      const isOver = d.calories > targetCalories;
+      return {
+        label: dayName,
+        kcal: d.calories,
+        height: `${hPct}%`,
+        color: isOver ? "bg-error/40" : "bg-primary",
+      };
+    });
+
+    return {
+      today: dynamicBars.slice(-1),
+      yesterday: dynamicBars.slice(-2, -1),
+      "7days": dynamicBars,
+      month: dynamicBars,
+    };
+  }, [adherenceDays, targetCalories]);
+
+  const macroChartData = useMemo(() => {
+    const days = adherenceDays.slice(-7);
+    const getBars = (key: "carbs" | "protein" | "fat") => {
+      if (days.length === 0) {
+        return [
+          { label: "Mon", height: "40%" },
+          { label: "Tue", height: "50%" },
+          { label: "Wed", height: "60%" },
+          { label: "Thu", height: "45%" },
+          { label: "Fri", height: "70%" },
+          { label: "Sat", height: "65%" },
+          { label: "Sun", height: "80%" },
+        ];
+      }
+      const maxVal = Math.max(...days.map(d => d[key]), 10);
+      return days.map(d => {
+        const label = new Date(d.date).toLocaleDateString("en-US", { weekday: "short" });
+        const hPct = Math.min(100, Math.max(15, Math.round((d[key] / maxVal) * 100)));
+        return { label, height: `${hPct}%` };
+      });
+    };
+
+    return {
+      carbs: {
+        description: `Carbohydrate intake over recent days based on logged meals.`,
+        bars: getBars("carbs"),
+      },
+      protein: {
+        description: `Protein intake tracking across logged Sri Lankan meals.`,
+        bars: getBars("protein"),
+      },
+      fat: {
+        description: `Fat intake distribution over the selected period.`,
+        bars: getBars("fat"),
+      },
+    };
+  }, [adherenceDays]);
   const diffText = weightKg > targetWeightKg ? "kg to lose" : "kg to gain";
   
   const bmi = (weightKg / Math.pow(heightCm / 100, 2)).toFixed(1);
