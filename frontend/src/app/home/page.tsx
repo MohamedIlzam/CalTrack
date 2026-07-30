@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
@@ -423,11 +424,9 @@ export default function HomePage() {
       {/* Fixed Header */}
       <header className="fixed top-0 left-0 right-0 z-50 w-full px-6 py-4 bg-white/80 backdrop-blur-xl flex justify-between items-center border-b border-gray-100/50">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full border border-[#006B5F]/10 overflow-hidden bg-gray-200">
-            <div className="w-full h-full bg-[#006B5F]/20 flex items-center justify-center text-[10px] text-[#006B5F] font-bold">
-              {displayName.slice(0, 2).toUpperCase()}
-            </div>
-          </div>
+          <Link href="/profile" title="View Profile & Settings" className="w-8 h-8 rounded-full border border-[#006B5F]/20 overflow-hidden bg-[#006B5F]/10 hover:scale-105 active:scale-95 transition-all flex items-center justify-center text-[10px] text-[#006B5F] font-black">
+            {displayName.slice(0, 2).toUpperCase()}
+          </Link>
 
           <div>
             <h1 className="text-[18px] font-extrabold text-[#006B5F] tracking-tight leading-none mb-[2px]">
