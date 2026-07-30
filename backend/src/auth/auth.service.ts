@@ -123,4 +123,39 @@ export class AuthService {
       },
     };
   }
+
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    const { passwordHash, ...result } = user;
+    return result;
+  }
+
+  async updateProfile(userId: string, dto: any) {
+    const dataToUpdate: any = {};
+
+    if (dto.name !== undefined) dataToUpdate.name = dto.name;
+    if (dto.weightKg !== undefined) dataToUpdate.weightKg = parseFloat(dto.weightKg);
+    if (dto.targetWeightKg !== undefined) dataToUpdate.targetWeightKg = parseFloat(dto.targetWeightKg);
+    if (dto.heightCm !== undefined) dataToUpdate.heightCm = parseFloat(dto.heightCm);
+    if (dto.goal !== undefined) dataToUpdate.goal = dto.goal.toUpperCase() as Goal;
+    if (dto.activityLevel !== undefined) dataToUpdate.activityLevel = dto.activityLevel.toUpperCase() as ActivityLevel;
+    if (dto.targetCalories !== undefined) dataToUpdate.targetCalories = parseInt(dto.targetCalories, 10);
+    if (dto.targetProteinG !== undefined) dataToUpdate.targetProteinG = parseInt(dto.targetProteinG, 10);
+    if (dto.targetCarbsG !== undefined) dataToUpdate.targetCarbsG = parseInt(dto.targetCarbsG, 10);
+    if (dto.targetFatG !== undefined) dataToUpdate.targetFatG = parseInt(dto.targetFatG, 10);
+    if (dto.timezone !== undefined) dataToUpdate.timezone = dto.timezone;
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: dataToUpdate,
+    });
+
+    const { passwordHash, ...result } = updatedUser;
+    return result;
+  }
 }

@@ -204,3 +204,57 @@ export async function fetchAdherence(days: number = 7): Promise<AdherenceDay[]> 
 
   return res.json();
 }
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  weightKg?: number;
+  targetWeightKg?: number;
+  heightCm?: number;
+  goal?: 'LOSE' | 'MAINTAIN' | 'GAIN';
+  activityLevel?: 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE';
+  targetCalories?: number;
+  targetProteinG?: number;
+  targetCarbsG?: number;
+  targetFatG?: number;
+  timezone?: string;
+}
+
+export async function fetchUserProfile(): Promise<UserProfile | null> {
+  const token = getAuthToken();
+  if (!token) return null;
+
+  const host = getBackendHost();
+  const res = await fetch(`http://${host}:3001/auth/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    if (res.status === 401) return null;
+    throw new Error('Failed to fetch user profile');
+  }
+
+  return res.json();
+}
+
+export async function updateUserProfile(payload: Partial<UserProfile>): Promise<UserProfile> {
+  const token = getAuthToken();
+  const host = getBackendHost();
+
+  const res = await fetch(`http://${host}:3001/auth/profile`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(errorData.message || 'Failed to update profile');
+  }
+
+  return res.json();
+}

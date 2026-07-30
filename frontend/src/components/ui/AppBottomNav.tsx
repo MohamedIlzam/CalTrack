@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 
 interface AppBottomNavProps {
-  activeTab?: "today" | "search" | "ai" | "progress";
+  activeTab?: "today" | "search" | "ai" | "progress" | "profile";
 }
 
 // ─── Dial geometry ────────────────────────────────────────────────────────────
