@@ -244,42 +244,49 @@ function getFoodEmoji(name: string, fallback: string = "🍽️"): string {
   return fallback;
 }
 
-function GreenishMealCard({
-  entry,
+function CollectiveMealCard({
+  slotLabel,
+  entries,
   mealIcon,
-  onDelete,
+  onDeleteEntry,
 }: {
-  entry: FoodEntry;
+  slotLabel: string;
+  entries: FoodEntry[];
   mealIcon: string;
-  onDelete: (id: string) => void;
+  onDeleteEntry: (id: string) => void;
 }) {
-  const items = entry.ingredients && entry.ingredients.length > 0
-    ? entry.ingredients.map(ing => ({
-        id: ing.id,
-        name: ing.name,
-        qty: ing.qty,
-        emoji: getFoodEmoji(ing.name, mealIcon),
-      }))
-    : [{
-        id: entry.id,
-        name: entry.name,
-        qty: 1,
-        emoji: getFoodEmoji(entry.name, mealIcon),
-      }];
+  // Combine all items across entries into a unified list
+  const allItems = useMemo(() => {
+    const list: Array<{ id: string; name: string; qty: number; emoji: string }> = [];
+    entries.forEach((e) => {
+      if (e.ingredients && e.ingredients.length > 0) {
+        e.ingredients.forEach((ing) => {
+          list.push({
+            id: ing.id || `${e.id}-${ing.name}`,
+            name: ing.name,
+            qty: ing.qty,
+            emoji: getFoodEmoji(ing.name, mealIcon),
+          });
+        });
+      } else {
+        list.push({
+          id: e.id,
+          name: e.name,
+          qty: 1,
+          emoji: getFoodEmoji(e.name, mealIcon),
+        });
+      }
+    });
+    return list;
+  }, [entries, mealIcon]);
+
+  const totalKcal = entries.reduce((s, e) => s + e.kcal, 0);
+  const totalProtein = entries.reduce((s, e) => s + e.protein, 0);
+  const totalCarbs = entries.reduce((s, e) => s + e.carbs, 0);
+  const totalFat = entries.reduce((s, e) => s + e.fat, 0);
 
   return (
     <div className="relative mb-3 group">
-      {/* Delete button at top right */}
-      <button
-        onClick={() => onDelete(entry.id)}
-        title="Delete Meal"
-        className="absolute -top-2 -right-2 z-20 w-7 h-7 rounded-full bg-red-500 text-white shadow-md flex items-center justify-center opacity-90 hover:opacity-100 hover:scale-110 active:scale-95 transition-all"
-      >
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-
       {/* Exact Greenish Plate Card matching Search Page */}
       <div 
         className="flex-none shadow-[0_10px_40px_rgba(0,107,95,0.2)] rounded-[26px] p-4 flex gap-[14px] overflow-hidden relative"
@@ -288,19 +295,19 @@ function GreenishMealCard({
           backdropFilter: "blur(12px)"
         }}
       >
-        {/* Left Side: Stats */}
+        {/* Left Side: Total Stats */}
         <div className="w-[42%] flex flex-col justify-center border-r border-white/20 pr-3 relative">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/60 mb-1 leading-none">Total</p>
             <p className="text-[34px] font-extrabold text-white tracking-[-1px] leading-none flex items-baseline gap-[2px]">
-              {entry.kcal}<span className="text-[14px] font-semibold opacity-75">kcal</span>
+              {totalKcal}<span className="text-[14px] font-semibold opacity-75">kcal</span>
             </p>
           </div>
           <div className="flex justify-between mt-4 pr-1">
             {[
-              { label: "P", val: entry.protein },
-              { label: "C", val: entry.carbs },
-              { label: "F", val: entry.fat }
+              { label: "P", val: totalProtein },
+              { label: "C", val: totalCarbs },
+              { label: "F", val: totalFat }
             ].map(({ label, val }) => (
               <div key={label} className="flex flex-col items-start gap-[1px]">
                 <p className="text-[9px] font-bold text-white/50 leading-none">{label}</p>
@@ -312,18 +319,28 @@ function GreenishMealCard({
           </div>
         </div>
 
-        {/* Right Side: Plate Items (Read-only scrollable list) */}
+        {/* Right Side: Scrollable List of ALL Foods in this Meal Slot */}
         <div className="w-[58%] flex flex-col gap-[6px] max-h-[125px] overflow-y-auto no-scrollbar pl-1">
-          {items.map((item) => (
-            <div key={item.id} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px]" style={{ background: "rgba(255,255,255,0.12)" }}>
+          {allItems.map((item) => (
+            <div key={item.id} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px] relative group/item" style={{ background: "rgba(255,255,255,0.12)" }}>
               <span className="text-[18px] leading-none">{item.emoji}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-bold text-white truncate leading-tight">{item.name}</p>
                 <p className="text-[10px] text-white/60 truncate mt-[1px] tracking-wide">{item.qty} {item.qty === 1 ? 'srv' : 'srvs'}</p>
               </div>
-              {/* Static Read-only Quantity Badge */}
-              <div className="bg-black/20 rounded-full px-2 py-0.5 select-none">
-                <span className="text-[11px] font-bold text-white/90 tabular-nums">x{item.qty}</span>
+              <div className="flex items-center gap-1.5">
+                <div className="bg-black/20 rounded-full px-2 py-0.5 select-none">
+                  <span className="text-[11px] font-bold text-white/90 tabular-nums">x{item.qty}</span>
+                </div>
+                <button
+                  onClick={() => onDeleteEntry(item.id.includes('-') ? item.id.split('-')[0] : item.id)}
+                  title="Remove item"
+                  className="w-5 h-5 rounded-full bg-black/20 hover:bg-red-500/80 text-white/70 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             </div>
           ))}
@@ -754,16 +771,14 @@ export default function HomePage() {
               </div>
 
               {hasEntries ? (
-                /* Populated state — show collective greenish meal cards */
+                /* Populated state — show single collective greenish card per meal slot with scrollable foods list */
                 <div className="flex flex-col gap-2">
-                  {mealEntries.map((entry) => (
-                    <GreenishMealCard
-                      key={entry.id}
-                      entry={entry}
-                      mealIcon={MEAL_ICONS[slot]}
-                      onDelete={handleDeleteEntry}
-                    />
-                  ))}
+                  <CollectiveMealCard
+                    slotLabel={capitalize(slot)}
+                    entries={mealEntries}
+                    mealIcon={MEAL_ICONS[slot]}
+                    onDeleteEntry={handleDeleteEntry}
+                  />
 
                   <button
                     onClick={() => router.push(`/search?meal=${slot}`)}
