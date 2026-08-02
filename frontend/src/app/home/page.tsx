@@ -25,13 +25,13 @@ function getGreeting(): string {
 }
 
 // ─── Ring constants ───────────────────────────────────────────────────────────
-const CR_SIZE = 172;
-const CR_STROKE = 14;
+const CR_SIZE = 160;
+const CR_STROKE = 13;
 const CR_R = CR_SIZE / 2 - CR_STROKE / 2;
 const CR_C = 2 * Math.PI * CR_R;
 
-const MR_SIZE = 44;
-const MR_STROKE = 4.5;
+const MR_SIZE = 40;
+const MR_STROKE = 4;
 const MR_R = MR_SIZE / 2 - MR_STROKE / 2;
 const MR_C = 2 * Math.PI * MR_R;
 
@@ -477,7 +477,7 @@ export default function HomePage() {
               borderRadius: 32,
               background: "linear-gradient(150deg, #082e2a 0%, #0a4038 35%, #005c4e 70%, #00695c 100%)",
               boxShadow: "0 40px 80px rgba(0,60,50,0.35), 0 12px 28px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)",
-              padding: "24px 22px 26px",
+              padding: "20px 16px 22px",
             }}
           >
             {/* Ambient blobs */}
@@ -486,7 +486,7 @@ export default function HomePage() {
             <div className="absolute pointer-events-none" style={{ top: 0, left: "10%", right: "10%", height: 1, background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)" }} />
 
             {/* Header */}
-            <div className="flex items-start justify-between mb-6 relative">
+            <div className="flex items-start justify-between mb-5 relative">
               <div>
                 <p style={{ fontSize: 17, fontWeight: 800, color: "#ffffff", lineHeight: 1, letterSpacing: "-0.3px" }}>
                   Health Card
@@ -507,7 +507,7 @@ export default function HomePage() {
             </div>
 
             {/* Ring + Macros */}
-            <div className="flex items-center justify-between gap-3 relative">
+            <div className="flex items-center justify-between gap-2.5 relative">
               <CalorieRing
                 remaining={remaining}
                 goal={targetCalories}
@@ -515,7 +515,7 @@ export default function HomePage() {
                 burned={0}
               />
               <div 
-                className="flex flex-col justify-between flex-1 min-w-0 rounded-2xl p-2.5 px-3 border border-white/[0.08] shadow-inner"
+                className="flex flex-col justify-between flex-1 min-w-0 rounded-2xl p-2.5 px-3.5 border border-white/[0.08] shadow-inner"
                 style={{ height: CR_SIZE, background: "rgba(255,255,255,0.04)", backdropFilter: "blur(8px)" }}
               >
                 {[
