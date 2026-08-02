@@ -266,7 +266,7 @@ function CollectiveMealCard({
             id: ing.id ? ing.id : `${e.id}::ing::${ingIdx}`,
             entryId: e.id,
             name: ing.name,
-            qty: ing.qty || 1,
+            qty: ing.qty ?? e.qty ?? 1,
             emoji: getFoodEmoji(ing.name, mealIcon),
           });
         });
@@ -277,7 +277,7 @@ function CollectiveMealCard({
             id: `${e.id}::part::${idx}`,
             entryId: e.id,
             name: itemName,
-            qty: 1,
+            qty: e.qty ?? 1,
             emoji: getFoodEmoji(itemName, mealIcon),
           });
         });
@@ -286,7 +286,7 @@ function CollectiveMealCard({
           id: e.id,
           entryId: e.id,
           name: e.name,
-          qty: 1,
+          qty: e.qty ?? 1,
           emoji: getFoodEmoji(e.name, mealIcon),
         });
       }
@@ -464,6 +464,7 @@ export default function HomePage() {
           fat: Math.round(e.loggedFatG),
           serving: e.unitName,
           meal: mealSlot,
+          qty: e.servingQuantity ?? 1,
           ingredients: existingLocal?.ingredients,
         };
       });

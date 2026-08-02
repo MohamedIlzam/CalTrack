@@ -394,6 +394,7 @@ function SearchContent() {
         protein,
         fat,
         serving: servingStr,
+        qty: item.qty,
         ingredients: [{ id: item.id, name: item.name, qty: item.qty }],
       });
 
