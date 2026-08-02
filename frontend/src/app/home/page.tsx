@@ -25,13 +25,13 @@ function getGreeting(): string {
 }
 
 // ─── Ring constants ───────────────────────────────────────────────────────────
-const CR_SIZE = 184;
-const CR_STROKE = 15;
+const CR_SIZE = 172;
+const CR_STROKE = 14;
 const CR_R = CR_SIZE / 2 - CR_STROKE / 2;
 const CR_C = 2 * Math.PI * CR_R;
 
-const MR_SIZE = 54;
-const MR_STROKE = 5.5;
+const MR_SIZE = 44;
+const MR_STROKE = 4.5;
 const MR_R = MR_SIZE / 2 - MR_STROKE / 2;
 const MR_C = 2 * Math.PI * MR_R;
 
@@ -144,7 +144,7 @@ function MacroRing({ label, value, total, unit, color, glow, index }: MacroData 
 
   return (
     <motion.div
-      className="flex items-center gap-3"
+      className="flex items-center gap-2 px-0.5"
       initial={{ opacity: 0, x: 12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.45, ease: "easeOut", delay: 0.35 + index * 0.1 }}
@@ -507,14 +507,17 @@ export default function HomePage() {
             </div>
 
             {/* Ring + Macros */}
-            <div className="flex items-stretch gap-4 relative">
+            <div className="flex items-center justify-between gap-3 relative">
               <CalorieRing
                 remaining={remaining}
                 goal={targetCalories}
                 consumed={consumed}
                 burned={0}
               />
-              <div className="flex flex-col justify-between flex-1 min-w-0" style={{ height: CR_SIZE }}>
+              <div 
+                className="flex flex-col justify-between flex-1 min-w-0 rounded-2xl p-2.5 px-3 border border-white/[0.08] shadow-inner"
+                style={{ height: CR_SIZE, background: "rgba(255,255,255,0.04)", backdropFilter: "blur(8px)" }}
+              >
                 {[
                   { label: "Carbs",   value: consumedCarbs, total: targetCarbsG, unit: "g", color: "#ffad3a", glow: "rgba(255,173,58,0.25)" },
                   { label: "Protein", value: consumedProtein,  total: targetProteinG, unit: "g", color: "#2dd4bf", glow: "rgba(45,212,191,0.2)" },
