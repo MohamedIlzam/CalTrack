@@ -188,11 +188,11 @@ function MacroRing({ label, value, total, unit, color, glow, index }: MacroData 
             / {total}{unit}
           </span>
         </p>
-        <div style={{ height: 3, width: 64, background: "rgba(255,255,255,0.08)", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
+        <div style={{ height: 3, width: "100%", maxWidth: 60, background: "rgba(255,255,255,0.12)", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
           <motion.div
             style={{ height: "100%", background: color, borderRadius: 99 }}
             initial={{ width: 0 }}
-            animate={{ width: `${total > 0 ? (value / total) * 100 : 0}%` }}
+            animate={{ width: `${total > 0 ? Math.min(100, Math.max(0, Math.round((value / total) * 100))) : 0}%` }}
             transition={{ duration: 1, ease: [0.4, 0, 0.2, 1], delay: 0.6 + index * 0.1 }}
           />
         </div>

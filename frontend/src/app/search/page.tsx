@@ -223,6 +223,8 @@ function SearchContent() {
 
   // ── Search / filter ──────────────────────────────────────────────────────────
   const normalizedQuery = searchQuery.toLowerCase().trim();
+  const isDefaultEmpty = !searchQuery.trim() && activeCategory === "All";
+
   const localMatchingFoods = FOOD_DB.filter((f) => {
     const matchesCategory = activeCategory === "All" || f.category === activeCategory;
     const matchesQuery = !normalizedQuery || f.name.toLowerCase().includes(normalizedQuery);
