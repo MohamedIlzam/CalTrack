@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
@@ -222,12 +222,21 @@ function SearchContent() {
   }, [aiMessages, aiThinking]);
 
   // ── Search / filter ──────────────────────────────────────────────────────────
-  const isDefaultEmpty = !searchQuery.trim() && activeCategory === "All";
-  const displayedFoods = searchQuery.trim() 
-    ? searchedFoods 
-    : isDefaultEmpty
-      ? []
-      : FOOD_DB.filter((f) => f.category === activeCategory);
+  const normalizedQuery = searchQuery.toLowerCase().trim();
+  const localMatchingFoods = FOOD_DB.filter((f) => {
+    const matchesCategory = activeCategory === "All" || f.category === activeCategory;
+    const matchesQuery = !normalizedQuery || f.name.toLowerCase().includes(normalizedQuery);
+    return matchesCategory && matchesQuery;
+  });
+
+  // Combine backend results (if available) with local database fallback
+  const displayedFoods = useMemo(() => {
+    if (searchedFoods.length > 0) {
+      if (activeCategory === "All") return searchedFoods;
+      return searchedFoods.filter((f) => f.category === activeCategory);
+    }
+    return localMatchingFoods;
+  }, [searchedFoods, localMatchingFoods, activeCategory]);
 
   // ── Plate helpers ────────────────────────────────────────────────────────────
   const getPlateQty = (id: string) => plateItems.find((i) => i.id === id)?.qty ?? 0;
