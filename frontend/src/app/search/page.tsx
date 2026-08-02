@@ -232,7 +232,7 @@ function SearchContent() {
             emoji: dbMatch ? dbMatch.emoji : "🍽️",
             chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
             category: dbMatch ? dbMatch.category : "Custom",
-            qty: ing.qty || 1,
+            qty: ing.qty ?? entryToEdit.qty ?? 1,
           });
         });
       } else if (entryToEdit.name && entryToEdit.name.includes(",")) {
@@ -251,7 +251,7 @@ function SearchContent() {
             emoji: dbMatch ? dbMatch.emoji : "🍽️",
             chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
             category: dbMatch ? dbMatch.category : "Custom",
-            qty: 1,
+            qty: entryToEdit.qty ?? 1,
           });
         });
       } else {
@@ -268,7 +268,7 @@ function SearchContent() {
           emoji: dbMatch ? dbMatch.emoji : "🍽️",
           chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
           category: dbMatch ? dbMatch.category : "Custom",
-          qty: 1,
+          qty: entryToEdit.qty ?? 1,
         });
       }
 
@@ -383,6 +383,8 @@ function SearchContent() {
       const protein = Math.round(item.proteinPerServing * item.qty);
       const fat = Math.round(item.fatPerServing * item.qty);
       const servingStr = item.qty === 1 ? "1 serving" : `${item.qty} servings`;
+      const ingredients = [{ id: item.id, name: item.name, qty: item.qty }];
+      const unitNamePayload = JSON.stringify({ name: item.name, ingredients });
       const tempId = `${Date.now()}-${Math.random()}-${item.id}`;
 
       addFoodEntry({
@@ -395,7 +397,7 @@ function SearchContent() {
         fat,
         serving: servingStr,
         qty: item.qty,
-        ingredients: [{ id: item.id, name: item.name, qty: item.qty }],
+        ingredients,
       });
 
       try {
@@ -404,7 +406,7 @@ function SearchContent() {
           foodId: item.id.startsWith('ai-') ? undefined : item.id,
           meal: apiMeal,
           servingQuantity: item.qty,
-          unitName: servingStr,
+          unitName: unitNamePayload,
           loggedWeightGrams: item.qty * 100,
           loggedCaloriesKcal: kcal,
           loggedProteinG: protein,
@@ -424,6 +426,7 @@ function SearchContent() {
       const comboName = plateItems.map(i => i.name).join(", ");
       const servingStr = `${plateItems.length} items`;
       const ingredients = plateItems.map(i => ({ id: i.id, name: i.name, qty: i.qty }));
+      const unitNamePayload = JSON.stringify({ name: comboName, ingredients });
       const tempId = `${Date.now()}-${Math.random()}`;
 
       addFoodEntry({
@@ -443,7 +446,7 @@ function SearchContent() {
           date: dateStr,
           meal: apiMeal,
           servingQuantity: 1,
-          unitName: comboName,
+          unitName: unitNamePayload,
           loggedWeightGrams: plateItems.length * 100,
           loggedCaloriesKcal: totalKcal,
           loggedProteinG: totalProtein,

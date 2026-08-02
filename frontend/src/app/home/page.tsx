@@ -446,7 +446,19 @@ export default function HomePage() {
         else if (m === 'snacks' || m === 'snack') mealSlot = 'snacks';
 
         const existingLocal = storeEntries.find(st => st.id === e.id);
-        let foodName = e.unitName || e.food?.name || "";
+        let foodName = e.food?.name || e.unitName || "";
+        let parsedIngredients: SubIngredient[] | undefined = existingLocal?.ingredients;
+
+        if (e.unitName && e.unitName.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(e.unitName);
+            if (parsed.name) foodName = parsed.name;
+            if (parsed.ingredients && Array.isArray(parsed.ingredients)) {
+              parsedIngredients = parsed.ingredients;
+            }
+          } catch (err) {}
+        }
+
         if (!foodName || foodName.endsWith("items") || foodName.endsWith("servings") || foodName.includes("Item")) {
           if (existingLocal && existingLocal.name) {
             foodName = existingLocal.name;
@@ -465,7 +477,7 @@ export default function HomePage() {
           serving: e.unitName,
           meal: mealSlot,
           qty: e.servingQuantity ?? 1,
-          ingredients: existingLocal?.ingredients,
+          ingredients: parsedIngredients,
         };
       });
 
