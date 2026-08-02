@@ -227,6 +227,23 @@ const MEAL_EMPTY_CTA: Record<MealSlot, { text: string; question: string }> = {
   saved_meals: { text: "Log Saved Meal", question: "Track one of your saved meals" },
 };
 
+function getFoodEmoji(name: string, fallback: string = "🍽️"): string {
+  const lower = name.toLowerCase();
+  if (/rice|bath|kiribath/.test(lower)) return "🍚";
+  if (/curry|parippu|dhal|kulambu/.test(lower)) return "🍛";
+  if (/roti|bread|paratha/.test(lower)) return "🫓";
+  if (/hopper|appa/.test(lower)) return "🥞";
+  if (/string hopper|indi appam/.test(lower)) return "🍝";
+  if (/fish|ambul thiyal/.test(lower)) return "🐟";
+  if (/chicken/.test(lower)) return "🍗";
+  if (/egg|biththara/.test(lower)) return "🥚";
+  if (/sambol|mallung/.test(lower)) return "🥗";
+  if (/banana|fruit|mango/.test(lower)) return "🍌";
+  if (/watalappam|pudding|sweet/.test(lower)) return "🍮";
+  if (/tea|coffee|milk/.test(lower)) return "☕";
+  return fallback;
+}
+
 function GreenishMealCard({
   entry,
   mealIcon,
@@ -241,13 +258,13 @@ function GreenishMealCard({
         id: ing.id,
         name: ing.name,
         qty: ing.qty,
-        emoji: mealIcon,
+        emoji: getFoodEmoji(ing.name, mealIcon),
       }))
     : [{
         id: entry.id,
         name: entry.name,
         qty: 1,
-        emoji: mealIcon,
+        emoji: getFoodEmoji(entry.name, mealIcon),
       }];
 
   return (
