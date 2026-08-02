@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { motion } from "motion/react";
 import {
@@ -25,13 +25,13 @@ function getGreeting(): string {
 }
 
 // ─── Ring constants ───────────────────────────────────────────────────────────
-const CR_SIZE = 184;
-const CR_STROKE = 15;
+const CR_SIZE = 160;
+const CR_STROKE = 13;
 const CR_R = CR_SIZE / 2 - CR_STROKE / 2;
 const CR_C = 2 * Math.PI * CR_R;
 
-const MR_SIZE = 54;
-const MR_STROKE = 5.5;
+const MR_SIZE = 40;
+const MR_STROKE = 4;
 const MR_R = MR_SIZE / 2 - MR_STROKE / 2;
 const MR_C = 2 * Math.PI * MR_R;
 
@@ -144,7 +144,7 @@ function MacroRing({ label, value, total, unit, color, glow, index }: MacroData 
 
   return (
     <motion.div
-      className="flex items-center gap-3"
+      className="flex items-center gap-2 px-0.5"
       initial={{ opacity: 0, x: 12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.45, ease: "easeOut", delay: 0.35 + index * 0.1 }}
@@ -188,11 +188,11 @@ function MacroRing({ label, value, total, unit, color, glow, index }: MacroData 
             / {total}{unit}
           </span>
         </p>
-        <div style={{ height: 3, width: 64, background: "rgba(255,255,255,0.08)", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
+        <div style={{ height: 3, width: "100%", maxWidth: 60, background: "rgba(255,255,255,0.12)", borderRadius: 99, marginTop: 4, overflow: "hidden" }}>
           <motion.div
             style={{ height: "100%", background: color, borderRadius: 99 }}
             initial={{ width: 0 }}
-            animate={{ width: `${total > 0 ? (value / total) * 100 : 0}%` }}
+            animate={{ width: `${total > 0 ? Math.min(100, Math.max(0, Math.round((value / total) * 100))) : 0}%` }}
             transition={{ duration: 1, ease: [0.4, 0, 0.2, 1], delay: 0.6 + index * 0.1 }}
           />
         </div>
@@ -215,7 +215,6 @@ const MEAL_ICONS: Record<MealSlot, string> = {
   dinner: "🌙",
   snacks: "🍪",
   snack: "🍪",
-  saved_meals: "❤️",
 };
 
 const MEAL_EMPTY_CTA: Record<MealSlot, { text: string; question: string }> = {
@@ -224,39 +223,101 @@ const MEAL_EMPTY_CTA: Record<MealSlot, { text: string; question: string }> = {
   dinner: { text: "Quick Add", question: "Plan your dinner in advance" },
   snacks: { text: "Add Snack", question: "Had a snack today?" },
   snack: { text: "Add Snack", question: "Had a snack today?" },
-  saved_meals: { text: "Log Saved Meal", question: "Track one of your saved meals" },
 };
 
-function GreenishMealCard({
-  entry,
+function getFoodEmoji(name: string, fallback: string = "🍽️"): string {
+  const lower = name.toLowerCase();
+  if (/rice|bath|kiribath/.test(lower)) return "🍚";
+  if (/curry|parippu|dhal|kulambu/.test(lower)) return "🍛";
+  if (/roti|bread|paratha/.test(lower)) return "🫓";
+  if (/hopper|appa/.test(lower)) return "🥞";
+  if (/string hopper|indi appam/.test(lower)) return "🍝";
+  if (/fish|ambul thiyal/.test(lower)) return "🐟";
+  if (/chicken/.test(lower)) return "🍗";
+  if (/egg|biththara/.test(lower)) return "🥚";
+  if (/sambol|mallung/.test(lower)) return "🥗";
+  if (/banana|fruit|mango/.test(lower)) return "🍌";
+  if (/watalappam|pudding|sweet/.test(lower)) return "🍮";
+  if (/tea|coffee|milk/.test(lower)) return "☕";
+  return fallback;
+}
+
+function CollectiveMealCard({
+  slotKey,
+  slotLabel,
+  entries,
   mealIcon,
-  onDelete,
+  onDeleteEntry,
+  onEditMeal,
 }: {
-  entry: FoodEntry;
+  slotKey: string;
+  slotLabel: string;
+  entries: FoodEntry[];
   mealIcon: string;
-  onDelete: (id: string) => void;
+  onDeleteEntry: (id: string) => void;
+  onEditMeal: (slot: string) => void;
 }) {
-  const items = entry.ingredients && entry.ingredients.length > 0
-    ? entry.ingredients.map(ing => ({
-        id: ing.id,
-        name: ing.name,
-        qty: ing.qty,
-        emoji: mealIcon,
-      }))
-    : [{
-        id: entry.id,
-        name: entry.name,
-        qty: 1,
-        emoji: mealIcon,
-      }];
+  const allItems = useMemo(() => {
+    const list: Array<{ id: string; entryId: string; name: string; qty: number; emoji: string }> = [];
+    entries.forEach((e) => {
+      if (e.ingredients && e.ingredients.length > 0) {
+        e.ingredients.forEach((ing, ingIdx) => {
+          list.push({
+            id: ing.id ? ing.id : `${e.id}::ing::${ingIdx}`,
+            entryId: e.id,
+            name: ing.name,
+            qty: ing.qty ?? e.qty ?? 1,
+            emoji: getFoodEmoji(ing.name, mealIcon),
+          });
+        });
+      } else if (e.name && e.name.includes(",")) {
+        const parts = e.name.split(",").map((p) => p.trim()).filter(Boolean);
+        parts.forEach((itemName, idx) => {
+          list.push({
+            id: `${e.id}::part::${idx}`,
+            entryId: e.id,
+            name: itemName,
+            qty: e.qty ?? 1,
+            emoji: getFoodEmoji(itemName, mealIcon),
+          });
+        });
+      } else {
+        list.push({
+          id: e.id,
+          entryId: e.id,
+          name: e.name,
+          qty: e.qty ?? 1,
+          emoji: getFoodEmoji(e.name, mealIcon),
+        });
+      }
+    });
+    return list;
+  }, [entries, mealIcon]);
+
+  const totalKcal = entries.reduce((s, e) => s + e.kcal, 0);
+  const totalProtein = entries.reduce((s, e) => s + e.protein, 0);
+  const totalCarbs = entries.reduce((s, e) => s + e.carbs, 0);
+  const totalFat = entries.reduce((s, e) => s + e.fat, 0);
 
   return (
-    <div className="relative mb-3 group">
-      {/* Delete button at top right */}
+    <div className="relative mb-3 group cursor-pointer" onClick={() => onEditMeal(slotKey)}>
+      {/* Top-Right Edit Meal Button */}
       <button
-        onClick={() => onDelete(entry.id)}
-        title="Delete Meal"
-        className="absolute -top-2 -right-2 z-20 w-7 h-7 rounded-full bg-red-500 text-white shadow-md flex items-center justify-center opacity-90 hover:opacity-100 hover:scale-110 active:scale-95 transition-all"
+        onClick={(e) => { e.stopPropagation(); onEditMeal(slotKey); }}
+        title={`Edit ${slotLabel}`}
+        className="absolute top-2.5 right-9 z-20 px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+      >
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+        </svg>
+        Edit
+      </button>
+
+      {/* Top-Right Card Delete Button (deletes all entries in this meal slot) */}
+      <button
+        onClick={(e) => { e.stopPropagation(); entries.forEach(el => onDeleteEntry(el.id)); }}
+        title={`Delete all ${slotLabel} items`}
+        className="absolute -top-2 -right-2 z-20 w-7 h-7 rounded-full bg-red-500 text-white shadow-md flex items-center justify-center opacity-90 hover:opacity-100 hover:scale-110 active:scale-95 transition-all cursor-pointer"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -271,19 +332,19 @@ function GreenishMealCard({
           backdropFilter: "blur(12px)"
         }}
       >
-        {/* Left Side: Stats */}
+        {/* Left Side: Total Stats */}
         <div className="w-[42%] flex flex-col justify-center border-r border-white/20 pr-3 relative">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/60 mb-1 leading-none">Total</p>
-            <p className="text-[34px] font-extrabold text-white tracking-[-1px] leading-none flex items-baseline gap-[2px]">
-              {entry.kcal}<span className="text-[14px] font-semibold opacity-75">kcal</span>
+            <p className="text-[36px] font-extrabold text-white tracking-[-1px] leading-none flex items-baseline gap-[2px]">
+              {totalKcal}<span className="text-[15px] font-semibold opacity-75">kcal</span>
             </p>
           </div>
           <div className="flex justify-between mt-4 pr-1">
             {[
-              { label: "P", val: entry.protein },
-              { label: "C", val: entry.carbs },
-              { label: "F", val: entry.fat }
+              { label: "P", val: totalProtein },
+              { label: "C", val: totalCarbs },
+              { label: "F", val: totalFat }
             ].map(({ label, val }) => (
               <div key={label} className="flex flex-col items-start gap-[1px]">
                 <p className="text-[9px] font-bold text-white/50 leading-none">{label}</p>
@@ -295,18 +356,28 @@ function GreenishMealCard({
           </div>
         </div>
 
-        {/* Right Side: Plate Items (Read-only scrollable list) */}
+        {/* Right Side: Scrollable List of ALL Foods in this Meal Slot */}
         <div className="w-[58%] flex flex-col gap-[6px] max-h-[125px] overflow-y-auto no-scrollbar pl-1">
-          {items.map((item) => (
-            <div key={item.id} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px]" style={{ background: "rgba(255,255,255,0.12)" }}>
+          {allItems.map((item, idx) => (
+            <div key={`${item.id}-${idx}`} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px] relative group/item" style={{ background: "rgba(255,255,255,0.12)" }}>
               <span className="text-[18px] leading-none">{item.emoji}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-bold text-white truncate leading-tight">{item.name}</p>
                 <p className="text-[10px] text-white/60 truncate mt-[1px] tracking-wide">{item.qty} {item.qty === 1 ? 'srv' : 'srvs'}</p>
               </div>
-              {/* Static Read-only Quantity Badge */}
-              <div className="bg-black/20 rounded-full px-2 py-0.5 select-none">
-                <span className="text-[11px] font-bold text-white/90 tabular-nums">x{item.qty}</span>
+              <div className="flex items-center gap-1.5">
+                <div className="bg-black/20 rounded-full px-2 py-0.5 select-none">
+                  <span className="text-[11px] font-bold text-white/90 tabular-nums">x{item.qty}</span>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDeleteEntry(item.entryId); }}
+                  title={`Remove ${item.name}`}
+                  className="w-5 h-5 rounded-full bg-black/30 hover:bg-red-500 text-white/80 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             </div>
           ))}
@@ -327,9 +398,9 @@ export default function HomePage() {
   const targetProteinG = useAppStore((s) => s.targetProteinG) || 120;
   const targetFatG = useAppStore((s) => s.targetFatG) || 65;
   const consumed = useAppStore(selectConsumedKcal);
-  const consumedCarbs = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.carbs, 0));
-  const consumedProtein = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.protein, 0));
-  const consumedFat = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.fat, 0));
+  const consumedCarbs = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.carbs, 0));
+  const consumedProtein = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.protein, 0));
+  const consumedFat = useAppStore((s) => s.entries.reduce((sum, e) => sum + e.fat, 0));
 
   useEffect(() => {
     if (!getAuthToken()) {
@@ -350,17 +421,13 @@ export default function HomePage() {
   const lunchEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "lunch")));
   const dinnerEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "dinner")));
   const snacksEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "snacks" || e.meal === "snack")));
-  const savedMealsEntries = useAppStore(useShallow((s) => s.entries.filter((e: FoodEntry) => e.meal === "saved_meals")));
   const breakfastKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "breakfast").reduce((sum, e) => sum + e.kcal, 0));
   const lunchKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "lunch").reduce((sum, e) => sum + e.kcal, 0));
   const dinnerKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "dinner").reduce((sum, e) => sum + e.kcal, 0));
   const snacksKcal = useAppStore((s) => s.entries.filter((e) => e.meal === "snacks" || e.meal === "snack").reduce((sum, e) => sum + e.kcal, 0));
   const removeFoodEntry = useAppStore((s) => s.removeFoodEntry);
-  const addFoodEntry = useAppStore((s) => s.addFoodEntry);
 
-  const [showSavedMeals, setShowSavedMeals] = useState(false);
-  const [expandedMealId, setExpandedMealId] = useState<string | null>(null);
-
+  const queryClient = useQueryClient();
   const dateIso = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   const { data: dailyLog } = useQuery({
@@ -370,6 +437,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (dailyLog && dailyLog.entries) {
+      const storeEntries = useAppStore.getState().entries;
       const apiEntries: FoodEntry[] = dailyLog.entries.map((e) => {
         let mealSlot: MealSlot = 'breakfast';
         const m = e.meal.toLowerCase();
@@ -377,33 +445,54 @@ export default function HomePage() {
         else if (m === 'dinner') mealSlot = 'dinner';
         else if (m === 'snacks' || m === 'snack') mealSlot = 'snacks';
 
+        const existingLocal = storeEntries.find(st => st.id === e.id);
+        let foodName = e.food?.name || e.unitName || "";
+        let parsedIngredients: SubIngredient[] | undefined = existingLocal?.ingredients;
+
+        if (e.unitName && e.unitName.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(e.unitName);
+            if (parsed.name) foodName = parsed.name;
+            if (parsed.ingredients && Array.isArray(parsed.ingredients)) {
+              parsedIngredients = parsed.ingredients;
+            }
+          } catch (err) {}
+        }
+
+        if (!foodName || foodName.endsWith("items") || foodName.endsWith("servings") || foodName.includes("Item")) {
+          if (existingLocal && existingLocal.name) {
+            foodName = existingLocal.name;
+          } else {
+            foodName = e.food?.name || `${mealSlot.charAt(0).toUpperCase() + mealSlot.slice(1)} Entry`;
+          }
+        }
+
         return {
           id: e.id,
-          name: e.food?.name || `${e.meal} Item`,
+          name: foodName,
           kcal: Math.round(e.loggedCaloriesKcal),
           carbs: Math.round(e.loggedCarbohydratesG),
           protein: Math.round(e.loggedProteinG),
           fat: Math.round(e.loggedFatG),
           serving: e.unitName,
           meal: mealSlot,
+          qty: e.servingQuantity ?? 1,
+          ingredients: parsedIngredients,
         };
       });
 
-      const storeEntries = useAppStore.getState().entries;
-      const savedEntries = storeEntries.filter(e => e.meal === 'saved_meals');
-      useAppStore.setState({ entries: [...savedEntries, ...apiEntries] });
+      useAppStore.setState({ entries: apiEntries });
     }
   }, [dailyLog]);
 
   const handleDeleteEntry = async (id: string) => {
     removeFoodEntry(id);
     try {
-      if (!id.startsWith('saved-')) {
-        await deleteMealEntry(id);
-      }
+      await deleteMealEntry(id);
     } catch (err) {
       console.error('Failed to delete meal entry from backend:', err);
     }
+    queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
   };
 
   const remaining = Math.max(0, targetCalories - consumed);
@@ -477,7 +566,7 @@ export default function HomePage() {
               borderRadius: 32,
               background: "linear-gradient(150deg, #082e2a 0%, #0a4038 35%, #005c4e 70%, #00695c 100%)",
               boxShadow: "0 40px 80px rgba(0,60,50,0.35), 0 12px 28px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)",
-              padding: "24px 22px 26px",
+              padding: "20px 16px 22px",
             }}
           >
             {/* Ambient blobs */}
@@ -486,7 +575,7 @@ export default function HomePage() {
             <div className="absolute pointer-events-none" style={{ top: 0, left: "10%", right: "10%", height: 1, background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)" }} />
 
             {/* Header */}
-            <div className="flex items-start justify-between mb-6 relative">
+            <div className="flex items-start justify-between mb-5 relative">
               <div>
                 <p style={{ fontSize: 17, fontWeight: 800, color: "#ffffff", lineHeight: 1, letterSpacing: "-0.3px" }}>
                   Health Card
@@ -507,14 +596,17 @@ export default function HomePage() {
             </div>
 
             {/* Ring + Macros */}
-            <div className="flex items-stretch gap-4 relative">
+            <div className="flex items-center justify-between gap-2.5 relative">
               <CalorieRing
                 remaining={remaining}
                 goal={targetCalories}
                 consumed={consumed}
                 burned={0}
               />
-              <div className="flex flex-col justify-between flex-1 min-w-0" style={{ height: CR_SIZE }}>
+              <div 
+                className="flex flex-col justify-between flex-1 min-w-0 rounded-2xl p-2.5 px-3.5 border border-white/[0.08] shadow-inner"
+                style={{ height: CR_SIZE, background: "rgba(255,255,255,0.04)", backdropFilter: "blur(8px)" }}
+              >
                 {[
                   { label: "Carbs",   value: consumedCarbs, total: targetCarbsG, unit: "g", color: "#ffad3a", glow: "rgba(255,173,58,0.25)" },
                   { label: "Protein", value: consumedProtein,  total: targetProteinG, unit: "g", color: "#2dd4bf", glow: "rgba(45,212,191,0.2)" },
@@ -532,7 +624,7 @@ export default function HomePage() {
           <h3 className="text-[18px] font-bold text-[#1A1C1C] mb-3">
             Quick Actions
           </h3>
-          <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar mb-6">
             <button className="flex items-center gap-2 px-4 py-2.5 bg-[#E8E8E8]/40 rounded-[12px] whitespace-nowrap">
               <svg className="w-[18px] h-[18px] text-[#006B5F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -541,145 +633,8 @@ export default function HomePage() {
                 Recent Foods
               </span>
             </button>
-
-            <button 
-              onClick={() => setShowSavedMeals(!showSavedMeals)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-[12px] whitespace-nowrap transition-colors ${showSavedMeals ? "bg-[#006B5F]/10" : "bg-[#E8E8E8]/40"}`}
-            >
-              <svg className={`w-[18px] h-[18px] ${showSavedMeals ? "text-[#006B5F]" : "text-[#006B5F]"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-              </svg>
-              <span className="text-[14px] font-semibold text-[#1A1C1C]">
-                Saved Meals
-              </span>
-            </button>
           </div>
         </div>
-
-        {/* ─── Saved Meals Section ─── */}
-        {showSavedMeals && (
-          <div className="mb-2">
-            <div className="flex justify-between items-end mb-3">
-              <h3 className="text-[20px] font-extrabold text-[#1A1C1C] tracking-[-0.5px]">
-                Saved Meals
-              </h3>
-              <span className={`text-[12px] font-bold uppercase tracking-[1.2px] mb-0.5 ${savedMealsEntries.length > 0 ? "text-[#006B5F]" : "text-[#3C4A46]/40"}`}>
-                {savedMealsEntries.length > 0 ? `${savedMealsEntries.length} COMBOS` : "EMPTY"}
-              </span>
-            </div>
-            
-            {savedMealsEntries.length > 0 ? (
-              <div className="bg-white rounded-[16px] shadow-sm p-4 flex flex-col gap-0 border border-[#EEEEEE]/50">
-                {savedMealsEntries.map((entry, i) => (
-                  <div key={entry.id}>
-                    <div 
-                      className="flex items-center justify-between py-2 cursor-pointer active:scale-[0.98] transition-transform"
-                      onClick={() => setExpandedMealId(expandedMealId === entry.id ? null : entry.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-[#F3F3F3] rounded-xl overflow-hidden flex items-center justify-center text-xl">
-                          ❤️
-                        </div>
-                        <div>
-                          <p className="text-[14px] font-bold text-[#1A1C1C]">{entry.name}</p>
-                          {expandedMealId !== entry.id && (
-                            <p className="text-[12px] font-medium text-[#3C4A46]">{entry.kcal} kcal • {entry.serving}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); removeFoodEntry(entry.id); }}
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-[#3C4A46]/30 hover:text-red-400 hover:bg-red-50 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* EXPANDED VIEW */}
-                    {expandedMealId === entry.id && (
-                      <div className="pl-[60px] pb-4 pr-4 animate-in slide-in-from-top-2 duration-200">
-                        {/* Summary Header */}
-                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100/80">
-                          <div className="flex items-center gap-4">
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-[#3C4A46]/40 uppercase tracking-widest leading-none mb-1">Items</span>
-                              <span className="text-[15px] font-extrabold text-[#1A1C1C] leading-none">
-                                {entry.ingredients?.length || 0}
-                              </span>
-                            </div>
-                            <div className="w-[1px] h-6 bg-gray-100" />
-                            <div className="flex gap-4">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-[#643E00]/60 uppercase tracking-widest leading-none mb-1">P</span>
-                                <span className="text-[15px] font-extrabold text-[#1A1C1C] leading-none">{entry.protein}g</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-[#FFAD3A]/80 uppercase tracking-widest leading-none mb-1">C</span>
-                                <span className="text-[15px] font-extrabold text-[#1A1C1C] leading-none">{entry.carbs}g</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-[#005047]/60 uppercase tracking-widest leading-none mb-1">F</span>
-                                <span className="text-[15px] font-extrabold text-[#1A1C1C] leading-none">{entry.fat}g</span>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="text-right">
-                            <span className="text-[10px] font-bold text-[#006B5F]/40 uppercase tracking-widest leading-none mb-1 block">Total</span>
-                            <span className="text-[15px] font-extrabold text-[#006B5F] leading-none">{entry.kcal} kcal</span>
-                          </div>
-                        </div>
-
-                        {entry.ingredients && entry.ingredients.length > 0 && (
-                          <div className="mb-4 border-l-2 border-[#006B5F]/10 pl-4 py-0.5 space-y-1">
-                            {entry.ingredients.map((ing, idx) => (
-                              <p key={idx} className="text-[13px] font-medium text-[#3C4A46]/70 flex justify-between">
-                                <span>{ing.name}</span>
-                                <span className="text-[#1A1C1C]/40 font-bold text-[11px]">x{ing.qty}</span>
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                        
-                        <div className="flex flex-wrap gap-2">
-                          {(["breakfast", "lunch", "dinner", "snack"] as MealSlot[]).map((slot) => (
-                            <button
-                              key={slot}
-                              onClick={() => {
-                                addFoodEntry({
-                                  ...entry,
-                                  id: `log-${Date.now()}-${Math.random()}`,
-                                  meal: slot
-                                });
-                                setExpandedMealId(null);
-                              }}
-                              className="px-3 py-1.5 rounded-full bg-[#006B5F]/10 text-[#006B5F] text-[11px] font-bold uppercase tracking-wider active:scale-95 transition-transform"
-                            >
-                              + {slot}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {i < savedMealsEntries.length - 1 && (
-                      <div className="border-t border-[#EEEEEE] my-1" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-[#F3F3F3] border-2 border-dashed border-[#BACAC5]/30 rounded-[16px] p-6 text-center">
-                <p className="text-[14px] font-medium text-[#3C4A46]">No saved meals yet.</p>
-                <p className="text-[12px] text-[#3C4A46]/70 mt-1">Go to the search screen & select 'Save as Meal' ❤️</p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ─── Meal Sections (data-driven) ─── */}
         {meals.map(({ slot, entries: mealEntries, kcal }) => {
@@ -734,16 +689,16 @@ export default function HomePage() {
               </div>
 
               {hasEntries ? (
-                /* Populated state — show collective greenish meal cards */
+                /* Populated state — show single collective greenish card per meal slot with scrollable foods list */
                 <div className="flex flex-col gap-2">
-                  {mealEntries.map((entry) => (
-                    <GreenishMealCard
-                      key={entry.id}
-                      entry={entry}
-                      mealIcon={MEAL_ICONS[slot]}
-                      onDelete={handleDeleteEntry}
-                    />
-                  ))}
+                  <CollectiveMealCard
+                    slotKey={slot}
+                    slotLabel={capitalize(slot)}
+                    entries={mealEntries}
+                    mealIcon={MEAL_ICONS[slot]}
+                    onDeleteEntry={handleDeleteEntry}
+                    onEditMeal={(s) => router.push(`/search?meal=${s}`)}
+                  />
 
                   <button
                     onClick={() => router.push(`/search?meal=${slot}`)}
@@ -766,7 +721,7 @@ export default function HomePage() {
                     )}
                   </svg>
                   <p className="text-[14px] font-medium text-[#3C4A46] text-center">
-                    {MEAL_EMPTY_CTA[slot].question}
+                    {MEAL_EMPTY_CTA[slot]?.question || "Track your meal for today"}
                   </p>
                   <button
                     onClick={() => router.push(`/search?meal=${slot}`)}
@@ -776,7 +731,7 @@ export default function HomePage() {
                         : "bg-[#006B5F] text-white shadow-[0_10px_15px_-3px_rgba(0,107,95,0.2)]"
                     }`}
                   >
-                    {MEAL_EMPTY_CTA[slot].text}
+                    {MEAL_EMPTY_CTA[slot]?.text || "Add Food"}
                   </button>
                 </div>
               )}

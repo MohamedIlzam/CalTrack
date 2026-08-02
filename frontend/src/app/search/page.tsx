@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, type MealSlot } from "@/store/useAppStore";
-import { postLogMeal } from "@/lib/api";
+import { postLogMeal, deleteMealEntry } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Food {
@@ -65,7 +65,6 @@ const MEAL_LABELS: Record<string, { label: string; emoji: string }> = {
   lunch:    { label: "Lunch",     emoji: "☀️" },
   dinner:   { label: "Dinner",    emoji: "🌙" },
   snack:    { label: "Snack",     emoji: "🍪" },
-  saved_meals: { label: "Save as Meal", emoji: "❤️" },
 };
 
 // ─── Live Search Fetcher ──────────────────────────────────────────────────────
@@ -171,6 +170,7 @@ function Stepper({ qty, onIncrease, onDecrease }: {
 // ─── Main Search + Build Content ──────────────────────────────────────────────
 function SearchContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const paramMeal = (searchParams.get("meal") ?? "breakfast") as MealSlot;
   const addFoodEntry = useAppStore((s) => s.addFoodEntry);
@@ -183,7 +183,6 @@ function SearchContent() {
   // ── Plate state ──────────────────────────────────────────────────────────────
   const [plateItems, setPlateItems] = useState<PlateItem[]>([]);
   const [selectedMeal, setSelectedMeal] = useState<MealSlot>(paramMeal);
-  const [savedMealName, setSavedMealName] = useState("");
 
   // ── AI state ─────────────────────────────────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false);
@@ -195,6 +194,7 @@ function SearchContent() {
   const searchRef = useRef<HTMLInputElement>(null);
   const aiInputRef = useRef<HTMLInputElement>(null);
   const aiScrollRef = useRef<HTMLDivElement>(null);
+  const initializedMealRef = useRef<string | null>(null);
 
   // ── React Query ──────────────────────────────────────────────────────────────
   const { data: searchedFoods = [], isFetching } = useQuery({
@@ -203,7 +203,83 @@ function SearchContent() {
     enabled: !!searchQuery.trim(),
   });
 
+  const entries = useAppStore((s) => s.entries);
+
   // ── Effects ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (initializedMealRef.current === selectedMeal) return;
+
+    const existingEntries = entries.filter(
+      (e) => e.meal === selectedMeal || (selectedMeal === "snacks" && e.meal === "snack")
+    );
+
+    if (existingEntries.length > 0) {
+      const entryToEdit = existingEntries.find((e) => e.ingredients && e.ingredients.length > 0) || existingEntries[0];
+      const items: PlateItem[] = [];
+
+      if (entryToEdit.ingredients && entryToEdit.ingredients.length > 0) {
+        entryToEdit.ingredients.forEach((ing) => {
+          const dbMatch = FOOD_DB.find(
+            (f) => f.id === ing.id || f.name.toLowerCase() === ing.name.toLowerCase()
+          );
+          items.push({
+            id: dbMatch ? dbMatch.id : (ing.id || `custom-${ing.name.toLowerCase()}`),
+            name: ing.name,
+            kcalPerServing: dbMatch ? dbMatch.kcalPerServing : Math.max(10, Math.round(entryToEdit.kcal / entryToEdit.ingredients!.length)),
+            proteinPerServing: dbMatch ? dbMatch.proteinPerServing : Math.max(1, Math.round(entryToEdit.protein / entryToEdit.ingredients!.length)),
+            carbsPerServing: dbMatch ? dbMatch.carbsPerServing : Math.max(1, Math.round(entryToEdit.carbs / entryToEdit.ingredients!.length)),
+            fatPerServing: dbMatch ? dbMatch.fatPerServing : Math.max(1, Math.round(entryToEdit.fat / entryToEdit.ingredients!.length)),
+            emoji: dbMatch ? dbMatch.emoji : "🍽️",
+            chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
+            category: dbMatch ? dbMatch.category : "Custom",
+            qty: ing.qty ?? entryToEdit.qty ?? 1,
+          });
+        });
+      } else if (entryToEdit.name && entryToEdit.name.includes(",")) {
+        const parts = entryToEdit.name.split(",").map((p) => p.trim()).filter(Boolean);
+        parts.forEach((itemName) => {
+          const dbMatch = FOOD_DB.find(
+            (f) => f.name.toLowerCase() === itemName.toLowerCase()
+          );
+          items.push({
+            id: dbMatch ? dbMatch.id : `custom-${itemName.toLowerCase()}`,
+            name: itemName,
+            kcalPerServing: dbMatch ? dbMatch.kcalPerServing : 150,
+            proteinPerServing: dbMatch ? dbMatch.proteinPerServing : 5,
+            carbsPerServing: dbMatch ? dbMatch.carbsPerServing : 25,
+            fatPerServing: dbMatch ? dbMatch.fatPerServing : 4,
+            emoji: dbMatch ? dbMatch.emoji : "🍽️",
+            chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
+            category: dbMatch ? dbMatch.category : "Custom",
+            qty: entryToEdit.qty ?? 1,
+          });
+        });
+      } else {
+        const dbMatch = FOOD_DB.find(
+          (f) => f.id === entryToEdit.id || f.name.toLowerCase() === entryToEdit.name.toLowerCase()
+        );
+        items.push({
+          id: dbMatch ? dbMatch.id : entryToEdit.id,
+          name: entryToEdit.name,
+          kcalPerServing: dbMatch ? dbMatch.kcalPerServing : entryToEdit.kcal,
+          proteinPerServing: dbMatch ? dbMatch.proteinPerServing : entryToEdit.protein,
+          carbsPerServing: dbMatch ? dbMatch.carbsPerServing : entryToEdit.carbs,
+          fatPerServing: dbMatch ? dbMatch.fatPerServing : entryToEdit.fat,
+          emoji: dbMatch ? dbMatch.emoji : "🍽️",
+          chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
+          category: dbMatch ? dbMatch.category : "Custom",
+          qty: entryToEdit.qty ?? 1,
+        });
+      }
+
+      setPlateItems(items);
+    } else {
+      setPlateItems([]);
+    }
+
+    initializedMealRef.current = selectedMeal;
+  }, [selectedMeal, entries]);
+
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
@@ -222,12 +298,23 @@ function SearchContent() {
   }, [aiMessages, aiThinking]);
 
   // ── Search / filter ──────────────────────────────────────────────────────────
+  const normalizedQuery = searchQuery.toLowerCase().trim();
   const isDefaultEmpty = !searchQuery.trim() && activeCategory === "All";
-  const displayedFoods = searchQuery.trim() 
-    ? searchedFoods 
-    : isDefaultEmpty
-      ? []
-      : FOOD_DB.filter((f) => f.category === activeCategory);
+
+  const localMatchingFoods = FOOD_DB.filter((f) => {
+    const matchesCategory = activeCategory === "All" || f.category === activeCategory;
+    const matchesQuery = !normalizedQuery || f.name.toLowerCase().includes(normalizedQuery);
+    return matchesCategory && matchesQuery;
+  });
+
+  // Combine backend results (if available) with local database fallback
+  const displayedFoods = useMemo(() => {
+    if (searchedFoods.length > 0) {
+      if (activeCategory === "All") return searchedFoods;
+      return searchedFoods.filter((f) => f.category === activeCategory);
+    }
+    return localMatchingFoods;
+  }, [searchedFoods, localMatchingFoods, activeCategory]);
 
   // ── Plate helpers ────────────────────────────────────────────────────────────
   const getPlateQty = (id: string) => plateItems.find((i) => i.id === id)?.qty ?? 0;
@@ -249,6 +336,21 @@ function SearchContent() {
     });
   }
 
+  function handleIncreasePlateItem(itemId: string) {
+    setPlateItems((prev) =>
+      prev.map((i) => (i.id === itemId ? { ...i, qty: Math.round((i.qty + 0.5) * 2) / 2 } : i))
+    );
+  }
+
+  function handleDecreasePlateItem(itemId: string) {
+    setPlateItems((prev) => {
+      const ex = prev.find((i) => i.id === itemId);
+      if (!ex) return prev;
+      if (ex.qty <= 0.5) return prev.filter((i) => i.id !== itemId);
+      return prev.map((i) => (i.id === itemId ? { ...i, qty: Math.round((i.qty - 0.5) * 2) / 2 } : i));
+    });
+  }
+
   // ── Totals ───────────────────────────────────────────────────────────────────
   const totalKcal    = Math.round(plateItems.reduce((s, i) => s + i.kcalPerServing * i.qty, 0));
   const totalProtein = Math.round(plateItems.reduce((s, i) => s + i.proteinPerServing * i.qty, 0));
@@ -258,29 +360,15 @@ function SearchContent() {
   async function handleSaveMeal() {
     const dateStr = new Date().toISOString().split("T")[0];
 
-    if (selectedMeal === "saved_meals") {
-      if (!savedMealName.trim()) {
-        document.getElementById("savedMealNameInput")?.focus();
-        return;
-      }
-      addFoodEntry({
-        id: `saved-${Date.now()}-${Math.random()}`,
-        meal: selectedMeal,
-        name: savedMealName.trim(),
-        kcal: totalKcal,
-        carbs: totalCarbs,
-        protein: totalProtein,
-        fat: totalFat,
-        serving: `${plateItems.length} items`,
-        ingredients: plateItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          qty: item.qty
-        }))
-      });
-      router.push("/home");
-      return;
-    }
+    // Clear previous entries for this meal slot when editing/updating
+    const store = useAppStore.getState();
+    const oldEntries = store.entries.filter(
+      (e) => e.meal === selectedMeal || (selectedMeal === "snacks" && e.meal === "snack")
+    );
+    oldEntries.forEach((e) => {
+      store.removeFoodEntry(e.id);
+      deleteMealEntry(e.id).catch(() => {});
+    });
 
     // Map UI meal slot to backend enum
     let apiMeal: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACKS' = 'BREAKFAST';
@@ -295,9 +383,12 @@ function SearchContent() {
       const protein = Math.round(item.proteinPerServing * item.qty);
       const fat = Math.round(item.fatPerServing * item.qty);
       const servingStr = item.qty === 1 ? "1 serving" : `${item.qty} servings`;
+      const ingredients = [{ id: item.id, name: item.name, qty: item.qty }];
+      const unitNamePayload = JSON.stringify({ name: item.name, ingredients });
+      const tempId = `${Date.now()}-${Math.random()}-${item.id}`;
 
       addFoodEntry({
-        id: `${Date.now()}-${Math.random()}-${item.id}`,
+        id: tempId,
         meal: selectedMeal,
         name: item.name,
         kcal,
@@ -305,22 +396,29 @@ function SearchContent() {
         protein,
         fat,
         serving: servingStr,
-        ingredients: [{ id: item.id, name: item.name, qty: item.qty }],
+        qty: item.qty,
+        ingredients,
       });
 
       try {
-        await postLogMeal({
+        const savedEntry = await postLogMeal({
           date: dateStr,
           foodId: item.id.startsWith('ai-') ? undefined : item.id,
           meal: apiMeal,
           servingQuantity: item.qty,
-          unitName: servingStr,
+          unitName: unitNamePayload,
           loggedWeightGrams: item.qty * 100,
           loggedCaloriesKcal: kcal,
           loggedProteinG: protein,
           loggedCarbohydratesG: carbs,
           loggedFatG: fat,
         });
+
+        if (savedEntry && savedEntry.id) {
+          useAppStore.setState((s) => ({
+            entries: s.entries.map((e) => e.id === tempId ? { ...e, id: savedEntry.id } : e)
+          }));
+        }
       } catch (err) {
         console.error("Failed to persist meal log to backend:", err);
       }
@@ -328,9 +426,11 @@ function SearchContent() {
       const comboName = plateItems.map(i => i.name).join(", ");
       const servingStr = `${plateItems.length} items`;
       const ingredients = plateItems.map(i => ({ id: i.id, name: i.name, qty: i.qty }));
+      const unitNamePayload = JSON.stringify({ name: comboName, ingredients });
+      const tempId = `${Date.now()}-${Math.random()}`;
 
       addFoodEntry({
-        id: `${Date.now()}-${Math.random()}`,
+        id: tempId,
         meal: selectedMeal,
         name: comboName,
         kcal: totalKcal,
@@ -342,22 +442,29 @@ function SearchContent() {
       });
 
       try {
-        await postLogMeal({
+        const savedEntry = await postLogMeal({
           date: dateStr,
           meal: apiMeal,
           servingQuantity: 1,
-          unitName: servingStr,
+          unitName: unitNamePayload,
           loggedWeightGrams: plateItems.length * 100,
           loggedCaloriesKcal: totalKcal,
           loggedProteinG: totalProtein,
           loggedCarbohydratesG: totalCarbs,
           loggedFatG: totalFat,
         });
+
+        if (savedEntry && savedEntry.id) {
+          useAppStore.setState((s) => ({
+            entries: s.entries.map((e) => e.id === tempId ? { ...e, id: savedEntry.id } : e)
+          }));
+        }
       } catch (err) {
-        console.error("Failed to persist meal log to backend:", err);
+        console.warn("Could not persist meal log to backend API, saved locally:", err);
       }
     }
 
+    queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
     router.push("/home");
   }
 
@@ -664,8 +771,8 @@ function SearchContent() {
 
               {/* Right Side: Plate Items (Scrollable) */}
               <div className="w-[58%] flex flex-col gap-[6px] max-h-[125px] overflow-y-auto no-scrollbar pl-1">
-                {plateItems.map((item) => (
-                  <div key={item.id} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px]" style={{ background: "rgba(255,255,255,0.12)" }}>
+                {plateItems.map((item, idx) => (
+                  <div key={`${item.id}-${idx}`} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px]" style={{ background: "rgba(255,255,255,0.12)" }}>
                     <span className="text-[18px] leading-none">{item.emoji}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-bold text-white truncate leading-tight">{item.name}</p>
@@ -673,11 +780,11 @@ function SearchContent() {
                     </div>
                     {/* Tiny Stepper */}
                     <div className="flex items-center gap-1 bg-black/20 rounded-full px-1 py-1">
-                      <button onClick={() => handleDecrease(item)} className="px-1.5 active:opacity-50">
+                      <button onClick={() => handleDecreasePlateItem(item.id)} className="px-1.5 active:opacity-50">
                         <svg className="w-[9px] h-[9px] text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" d="M5 12h14" /></svg>
                       </button>
                       <span className="text-[11px] font-bold text-white min-w-[12px] text-center leading-none tabular-nums select-none mb-[1px]">{item.qty}</span>
-                      <button onClick={() => handleIncrease(item)} className="px-1.5 active:opacity-50">
+                      <button onClick={() => handleIncreasePlateItem(item.id)} className="px-1.5 active:opacity-50">
                         <svg className="w-[9px] h-[9px] text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
                       </button>
                     </div>
@@ -689,7 +796,7 @@ function SearchContent() {
             {/* Save Bar Options */}
             <div className="flex-none pt-1 shrink-0">
               <div className="flex gap-2 mb-[14px] overflow-x-auto no-scrollbar">
-                {(["breakfast", "lunch", "dinner", "snack", "saved_meals"] as MealSlot[]).map((slot) => (
+                {(["breakfast", "lunch", "dinner", "snack"] as MealSlot[]).map((slot) => (
                   <button
                     key={slot}
                     onClick={() => setSelectedMeal(slot)}
@@ -704,19 +811,6 @@ function SearchContent() {
                   </button>
                 ))}
               </div>
-
-              {selectedMeal === "saved_meals" && (
-                <div className="mb-[14px]">
-                  <input
-                    id="savedMealNameInput"
-                    type="text"
-                    placeholder="Enter a name for this Custom Meal"
-                    value={savedMealName}
-                    onChange={(e) => setSavedMealName(e.target.value)}
-                    className="w-full h-[46px] rounded-[18px] border border-[#BACAC5]/40 px-4 text-[14px] text-[#1A1C1C] outline-none focus:border-[#006B5F] focus:ring-1 focus:ring-[#006B5F]/20 transition-all shadow-inner"
-                  />
-                </div>
-              )}
 
               <div className="flex gap-2 items-center w-full">
                 <button

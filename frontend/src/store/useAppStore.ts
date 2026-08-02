@@ -22,6 +22,7 @@ export interface FoodEntry {
   fat: number;     // grams
   serving: string; // e.g. "1 piece", "2 tbsp"
   meal: MealSlot;
+  qty?: number;
   ingredients?: SubIngredient[];
 }
 

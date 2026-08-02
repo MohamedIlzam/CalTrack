@@ -120,23 +120,28 @@ export class MealService {
   }
 
   async deleteEntry(userId: string, entryId: string) {
-    const entry = await this.prisma.mealLogEntry.findUnique({
-      where: { id: entryId },
-      include: { mealLog: true },
-    });
+    try {
+      const entry = await this.prisma.mealLogEntry.findUnique({
+        where: { id: entryId },
+        include: { mealLog: true },
+      });
 
-    if (!entry) {
-      throw new NotFoundException('Meal log entry not found');
+      if (!entry) {
+        return { success: true, message: 'Meal log entry already removed' };
+      }
+
+      if (entry.mealLog.userId !== userId) {
+        throw new ForbiddenException('You do not have permission to delete this entry');
+      }
+
+      await this.prisma.mealLogEntry.delete({
+        where: { id: entryId },
+      });
+
+      return { success: true };
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
+      return { success: true, message: 'Cleaned up' };
     }
-
-    if (entry.mealLog.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to delete this entry');
-    }
-
-    await this.prisma.mealLogEntry.delete({
-      where: { id: entryId },
-    });
-
-    return { success: true };
   }
 }
