@@ -258,3 +258,62 @@ export async function updateUserProfile(payload: Partial<UserProfile>): Promise<
 
   return res.json();
 }
+
+export interface AiFoodSuggestion {
+  id: string;
+  name: string;
+  kcalPerServing: number;
+  proteinPerServing: number;
+  carbsPerServing: number;
+  fatPerServing: number;
+  emoji: string;
+  chipColor: string;
+  category: string;
+}
+
+export interface AiParseResponse {
+  text: string;
+  suggestedFood?: AiFoodSuggestion;
+}
+
+export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
+  const token = getAuthToken();
+  const host = getBackendHost();
+
+  const res = await fetch(`http://${host}:3001/ai/parse-prompt`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ prompt }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(errorData.message || 'Failed to analyze AI prompt');
+  }
+
+  return res.json();
+}
+
+export async function scanMealImage(imageBase64: string): Promise<AiParseResponse> {
+  const token = getAuthToken();
+  const host = getBackendHost();
+
+  const res = await fetch(`http://${host}:3001/ai/scan-image`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ imageBase64 }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(errorData.message || 'Failed to scan meal photo');
+  }
+
+  return res.json();
+}
