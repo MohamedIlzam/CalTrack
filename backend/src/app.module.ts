@@ -7,9 +7,10 @@ import { ProgressModule } from './progress/progress.module';
 import { FoodModule } from './food/food.module';
 import { RedisModule } from './redis/redis.module';
 import { MealModule } from './meal/meal.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ProgressModule, FoodModule, RedisModule, MealModule],
+  imports: [PrismaModule, AuthModule, ProgressModule, FoodModule, RedisModule, MealModule, AiModule],
   controllers: [AppController],
   providers: [AppService],
 })

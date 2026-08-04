@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, type MealSlot } from "@/store/useAppStore";
-import { postLogMeal, deleteMealEntry } from "@/lib/api";
+import { postLogMeal, deleteMealEntry, parseAiPrompt, scanMealImage } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Food {
@@ -193,6 +193,7 @@ function SearchContent() {
   // ── Refs ──────────────────────────────────────────────────────────────────────
   const searchRef = useRef<HTMLInputElement>(null);
   const aiInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const aiScrollRef = useRef<HTMLDivElement>(null);
   const initializedMealRef = useRef<string | null>(null);
 
@@ -481,7 +482,7 @@ function SearchContent() {
     setTimeout(() => aiInputRef.current?.focus(), 350);
   }
 
-  function sendAiMessage() {
+  async function sendAiMessage() {
     const text = aiInput.trim();
     if (!text || aiThinking) return;
     const userMsg: AiMessage = { id: `u-${Date.now()}`, role: "user", text };
@@ -489,20 +490,77 @@ function SearchContent() {
     setAiInput("");
     setAiThinking(true);
 
-    // TODO: replace with real API call (Claude / Supabase Edge Function)
-    setTimeout(() => {
-      const food = generateFoodFromDescription(text);
+    try {
+      const res = await parseAiPrompt(text);
       setAiMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
           role: "ai",
-          text: `Here's my best estimate for **${food.name}**. Tap "Add to Plate" to include it.`,
-          suggestedFood: food,
+          text: res.text,
+          suggestedFood: res.suggestedFood,
         },
       ]);
+    } catch (err) {
+      console.error("AI parse prompt failed:", err);
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          id: `a-${Date.now()}`,
+          role: "ai",
+          text: "I couldn't analyze that meal description. Please try again!",
+        },
+      ]);
+    } finally {
       setAiThinking(false);
-    }, 1600);
+    }
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || aiThinking) return;
+
+    const userMsg: AiMessage = {
+      id: `u-img-${Date.now()}`,
+      role: "user",
+      text: "📷 Uploaded meal photo for AI scanning...",
+    };
+    setAiMessages((prev) => [...prev, userMsg]);
+    setAiThinking(true);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        try {
+          const res = await scanMealImage(base64);
+          setAiMessages((prev) => [
+            ...prev,
+            {
+              id: `a-img-${Date.now()}`,
+              role: "ai",
+              text: res.text,
+              suggestedFood: res.suggestedFood,
+            },
+          ]);
+        } catch (err) {
+          console.error("AI photo scan failed:", err);
+          setAiMessages((prev) => [
+            ...prev,
+            {
+              id: `a-${Date.now()}`,
+              role: "ai",
+              text: "Could not scan meal photo. Please try uploading again!",
+            },
+          ]);
+        } finally {
+          setAiThinking(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setAiThinking(false);
+    }
   }
 
   function addAiFoodToPlate(food: Food) {
@@ -998,16 +1056,36 @@ function SearchContent() {
 
         {/* AI input composer */}
         <div className="flex-shrink-0 px-4 pb-8 pt-2 border-t border-[#BACAC5]/15">
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handlePhotoUpload}
+            className="hidden"
+          />
           <div className="flex items-center gap-2 bg-white rounded-2xl px-3.5 border border-[#BACAC5]/25 shadow-sm">
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              disabled={aiThinking}
+              title="Scan Meal Photo"
+              className="w-[32px] h-[32px] rounded-full flex items-center justify-center flex-shrink-0 text-[#006B5F] hover:bg-[#EEF3F2] transition-colors"
+            >
+              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </button>
+
             <input
               ref={aiInputRef}
               type="text"
               value={aiInput}
               onChange={(e) => setAiInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendAiMessage()}
-              placeholder="e.g., Pol Kiri Curry with coconut milk…"
+              placeholder="Describe meal or upload photo…"
               className="flex-1 py-[13px] text-[14px] text-[#1A1C1C] placeholder:text-[#BACAC5] bg-transparent outline-none"
             />
+
             <button
               onClick={sendAiMessage}
               disabled={!aiInput.trim() || aiThinking}
