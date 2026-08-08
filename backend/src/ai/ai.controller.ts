@@ -22,33 +22,37 @@ export class AiController {
     let todaySummary: any = undefined;
 
     if (userId) {
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
-      if (user) {
-        userContext = {
-          name: user.name,
-          goal: user.goal,
-          targetCalories: user.targetCalories,
-          targetProteinG: user.targetProteinG,
-          targetCarbsG: user.targetCarbsG,
-          targetFatG: user.targetFatG,
-          weightKg: user.weightKg,
-        };
-      }
+      try {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (user) {
+          userContext = {
+            name: user.name,
+            goal: user.goal,
+            targetCalories: user.targetCalories,
+            targetProteinG: user.targetProteinG,
+            targetCarbsG: user.targetCarbsG,
+            targetFatG: user.targetFatG,
+            weightKg: user.weightKg,
+          };
+        }
 
-      const today = new Date().toISOString().split('T')[0];
-      const log = await this.prisma.mealLog.findUnique({
-        where: { userId_date: { userId, date: today } },
-        include: { entries: true },
-      });
+        const today = new Date().toISOString().split('T')[0];
+        const log = await this.prisma.mealLog.findUnique({
+          where: { userId_date: { userId, date: today } },
+          include: { entries: true },
+        });
 
-      if (log && log.entries) {
-        todaySummary = {
-          consumedCalories: log.entries.reduce((sum, e) => sum + e.loggedCaloriesKcal, 0),
-          consumedProtein: log.entries.reduce((sum, e) => sum + e.loggedProteinG, 0),
-          consumedCarbs: log.entries.reduce((sum, e) => sum + e.loggedCarbohydratesG, 0),
-          consumedFat: log.entries.reduce((sum, e) => sum + e.loggedFatG, 0),
-          mealsCount: log.entries.length,
-        };
+        if (log && log.entries) {
+          todaySummary = {
+            consumedCalories: log.entries.reduce((sum, e) => sum + e.loggedCaloriesKcal, 0),
+            consumedProtein: log.entries.reduce((sum, e) => sum + e.loggedProteinG, 0),
+            consumedCarbs: log.entries.reduce((sum, e) => sum + e.loggedCarbohydratesG, 0),
+            consumedFat: log.entries.reduce((sum, e) => sum + e.loggedFatG, 0),
+            mealsCount: log.entries.length,
+          };
+        }
+      } catch (err) {
+        // Safe database lookup fallback
       }
     }
 
