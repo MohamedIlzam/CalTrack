@@ -1,7 +1,6 @@
-"use client";
-
 import React, { useState, useRef, useEffect } from "react";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
+import { sendCoachChat } from "@/lib/api";
 
 type Message = {
   id: string;
@@ -127,6 +126,7 @@ function ProteinInsightCard() {
 export default function AIChatPage() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [input, setInput] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // auto-scroll to bottom on new messages
@@ -134,11 +134,11 @@ export default function AIChatPage() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isThinking]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || isThinking) return;
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString("en-US", {
@@ -156,14 +156,14 @@ export default function AIChatPage() {
 
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setIsThinking(true);
 
-    // Simulated coach reply after a short delay
-    setTimeout(() => {
+    try {
+      const res = await sendCoachChat(text);
       const coachMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "coach",
-        content:
-          "That's a great question! Based on your current meal logs, I'd suggest adding a serving of Parippu (lentil dhal) or boiled chickpeas to your next meal for an easy protein boost.",
+        content: res.reply,
         timestamp: new Date().toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
@@ -171,7 +171,23 @@ export default function AIChatPage() {
         }),
       };
       setMessages((prev) => [...prev, coachMsg]);
-    }, 1200);
+    } catch (err) {
+      console.error("Coach chat error:", err);
+      const coachMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "coach",
+        content:
+          "I'm having a little trouble connecting to the network right now. But keep hitting your protein and calorie targets today!",
+        timestamp: new Date().toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }),
+      };
+      setMessages((prev) => [...prev, coachMsg]);
+    } finally {
+      setIsThinking(false);
+    }
   };
 
   const handleChipClick = (text: string) => {
@@ -302,7 +318,52 @@ export default function AIChatPage() {
             </div>
           )
         )}
+
+        {/* ── Coach Thinking Animation ── */}
+        {isThinking && (
+          <div className="flex flex-col items-start space-y-3 mr-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-[#2DD4BF] flex items-center justify-center shadow-sm">
+                <svg
+                  className="w-3.5 h-3.5 text-[#004E45]"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M13 10V3L4 14h7v8l9-11h-7z"
+                  />
+                </svg>
+              </div>
+              <span className="text-[10px] font-semibold text-[#006B5F] uppercase tracking-[1.5px]">
+                Coach • thinking…
+              </span>
+            </div>
+
+            <div className="bg-white border border-[#BACAC5]/15 px-5 py-4 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="w-2 h-2 rounded-full bg-[#006B5F]"
+                  style={{
+                    animation: `coachBounce 1s ease-in-out ${i * 0.15}s infinite`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      <style>{`
+        @keyframes coachBounce {
+          0%, 100% { transform: translateY(0); opacity: 0.4; }
+          50% { transform: translateY(-5px); opacity: 1; }
+        }
+      `}</style>
 
       {/* ── Fixed Interactive Layer (Chips + Composer) ── */}
       <div className="fixed bottom-[80px] left-0 right-0 max-w-md mx-auto px-5 pb-4 pointer-events-none z-40">

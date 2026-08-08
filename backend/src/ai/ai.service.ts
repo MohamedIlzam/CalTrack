@@ -21,6 +21,71 @@ export interface ParsePromptResult {
 export class AiService {
   private readonly logger = new Logger(AiService.name);
 
+  async askCoach(
+    prompt: string,
+    userContext?: {
+      name?: string;
+      goal?: string;
+      targetCalories?: number;
+      targetProteinG?: number;
+      targetCarbsG?: number;
+      targetFatG?: number;
+      weightKg?: number;
+    },
+    todayMealsSummary?: {
+      consumedCalories: number;
+      consumedProtein: number;
+      consumedCarbs: number;
+      consumedFat: number;
+      mealsCount: number;
+    }
+  ): Promise<{ reply: string }> {
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (apiKey) {
+      try {
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey });
+
+        const systemInstructions = `You are the CalTrack AI Nutrition & Fitness Coach, an empathetic, highly knowledgeable coach specializing in macronutrients, energy balance, and global/South Asian/Sri Lankan dietary habits.
+User Details:
+- Name: ${userContext?.name || 'User'}
+- Fitness Goal: ${userContext?.goal || 'Healthy Living'}
+- Daily Target Calories: ${userContext?.targetCalories || 2000} kcal (Protein: ${userContext?.targetProteinG || 120}g, Carbs: ${userContext?.targetCarbsG || 220}g, Fat: ${userContext?.targetFatG || 60}g)
+- Current Weight: ${userContext?.weightKg || 'N/A'} kg
+- Today's Consumed So Far: ${todayMealsSummary?.consumedCalories || 0} kcal (Protein: ${todayMealsSummary?.consumedProtein || 0}g, Carbs: ${todayMealsSummary?.consumedCarbs || 0}g, Fat: ${todayMealsSummary?.consumedFat || 0}g) across ${todayMealsSummary?.mealsCount || 0} meals.
+
+Provide concise, friendly, motivational, and actionable advice. Reference their macro numbers and suggest concrete meals or habits when appropriate. Keep responses under 4 short paragraphs.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: `${systemInstructions}\n\nUser Question: "${prompt}"`,
+        });
+
+        const replyText = response.text || '';
+        if (replyText.trim()) {
+          return { reply: replyText.trim() };
+        }
+      } catch (err) {
+        this.logger.error('Gemini Coach chat failed, falling back to smart coach', err);
+      }
+    }
+
+    // Smart contextual fallback coach
+    const lower = prompt.toLowerCase();
+    let reply = `Great question! Looking at your daily goals of ${userContext?.targetCalories || 2000} kcal and ${userContext?.targetProteinG || 120}g protein, you are on a steady path.`;
+
+    if (lower.includes('protein') || lower.includes('energy') || lower.includes('muscle')) {
+      reply = `To boost your protein today towards your ${userContext?.targetProteinG || 120}g goal, try adding protein-dense choices like grilled chicken breast, boiled eggs, or Sri Lankan Parippu (lentil dhal) and chickpea sundal!`;
+    } else if (lower.includes('dinner') || lower.includes('lunch') || lower.includes('breakfast')) {
+      reply = `For a balanced meal under 500 kcal, a combination of red rice (1 cup), dhal curry, a serving of fish or chicken, and gotu kola mallung provides optimal fiber and micronutrients with sustained energy.`;
+    } else if (lower.includes('over target') || lower.includes('calories') || lower.includes('weight')) {
+      reply = `To stay within your ${userContext?.targetCalories || 2000} kcal target, watch liquid calories and portion sizes of fried snacks like rolls and vadai. Opt for fresh fruit, coconut water, or vegetable curries to stay full for longer.`;
+    }
+
+    return { reply };
+  }
+
   async parsePrompt(prompt: string): Promise<ParsePromptResult> {
     const apiKey = process.env.GEMINI_API_KEY;
 

@@ -297,6 +297,27 @@ export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
   return res.json();
 }
 
+export async function sendCoachChat(message: string): Promise<{ reply: string }> {
+  const token = getAuthToken();
+  const host = getBackendHost();
+
+  const res = await fetch(`http://${host}:3001/ai/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ message }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(errorData.message || 'Failed to send message to AI coach');
+  }
+
+  return res.json();
+}
+
 export async function scanMealImage(imageBase64: string): Promise<AiParseResponse> {
   const token = getAuthToken();
   const host = getBackendHost();
