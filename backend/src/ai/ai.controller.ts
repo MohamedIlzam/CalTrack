@@ -1,14 +1,14 @@
-import { Controller, Post, Body, UseGuards, BadRequestException, Req } from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException, Req } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { AiService } from './ai.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('ai')
-@UseGuards(JwtAuthGuard)
 export class AiController {
   constructor(
     private readonly aiService: AiService,
     private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
   ) {}
 
   @Post('chat')
@@ -17,7 +17,17 @@ export class AiController {
       throw new BadRequestException('message parameter is required');
     }
 
-    const userId = req.user?.id;
+    let userId: string | undefined = undefined;
+    const authHeader = req.headers?.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        const payload = this.jwtService.verify(token);
+        userId = payload.sub || payload.id;
+      } catch (e) {
+        // Invalid or expired token, proceed as guest
+      }
+    }
     let userContext: any = undefined;
     let todaySummary: any = undefined;
 

@@ -12,6 +12,7 @@ import {
   selectConsumedKcal,
   type MealSlot,
   type FoodEntry,
+  type SubIngredient,
 } from "@/store/useAppStore";
 import { fetchDailyLog, deleteMealEntry, getAuthToken } from "@/lib/api";
 
@@ -209,7 +210,7 @@ function formatDate(d: Date): string {
   });
 }
 
-const MEAL_ICONS: Record<MealSlot, string> = {
+const MEAL_ICONS: Partial<Record<MealSlot, string>> = {
   breakfast: "🍳",
   lunch: "🍛",
   dinner: "🌙",
@@ -217,7 +218,7 @@ const MEAL_ICONS: Record<MealSlot, string> = {
   snack: "🍪",
 };
 
-const MEAL_EMPTY_CTA: Record<MealSlot, { text: string; question: string }> = {
+const MEAL_EMPTY_CTA: Partial<Record<MealSlot, { text: string; question: string }>> = {
   breakfast: { text: "Log Breakfast", question: "What did you have for breakfast?" },
   lunch: { text: "Log Lunch", question: "What did you have for lunch?" },
   dinner: { text: "Quick Add", question: "Plan your dinner in advance" },
