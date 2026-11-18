@@ -1,87 +1,151 @@
-import { Controller, Post, Body, BadRequestException, Req } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import {
+  Controller,
+  Post,
+  Body,
+  BadRequestException,
+  UseGuards,
+  Req,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { AiService } from './ai.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+
+interface AuthenticatedRequest {
+  user: {
+    id: string;
+    email: string;
+    name?: string;
+  };
+}
 
 @Controller('ai')
+@UseGuards(JwtAuthGuard)
 export class AiController {
   constructor(
     private readonly aiService: AiService,
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
+    private readonly redisService: RedisService,
   ) {}
 
+  private async enforceRateLimit(userId: string): Promise<void> {
+    const rateLimitKey = `ratelimit:ai:${userId}`;
+    // 15 requests per 60 seconds (protects free-tier Gemini API quota)
+    const { allowed } = await this.redisService.checkRateLimit(rateLimitKey, 15, 60);
+    if (!allowed) {
+      throw new HttpException(
+        'Rate limit reached: Maximum 15 AI requests per minute. Please wait a moment before trying again.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
   @Post('chat')
-  async chat(@Req() req: any, @Body('message') message: string) {
-    if (!message || !message.trim()) {
-      throw new BadRequestException('message parameter is required');
+  async chat(@Req() req: AuthenticatedRequest, @Body('message') message: string) {
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      throw new BadRequestException('message string parameter is required and cannot be empty');
     }
 
-    let userId: string | undefined = undefined;
-    const authHeader = req.headers?.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        const payload = this.jwtService.verify(token);
-        userId = payload.sub || payload.id;
-      } catch (e) {
-        // Invalid or expired token, proceed as guest
-      }
+    const trimmed = message.trim();
+    if (trimmed.length > 1000) {
+      throw new BadRequestException('message length exceeds maximum allowed limit of 1000 characters');
     }
-    let userContext: any = undefined;
-    let todaySummary: any = undefined;
 
-    if (userId) {
-      try {
-        const user = await this.prisma.user.findUnique({ where: { id: userId } });
-        if (user) {
-          userContext = {
-            name: user.name,
-            goal: user.goal,
-            targetCalories: user.targetCalories,
-            targetProteinG: user.targetProteinG,
-            targetCarbsG: user.targetCarbsG,
-            targetFatG: user.targetFatG,
-            weightKg: user.weightKg,
-          };
+    const userId = req.user.id;
+    await this.enforceRateLimit(userId);
+
+    // Fetch authoritative user profile from database
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    const userContext = user
+      ? {
+          name: user.name,
+          goal: user.goal,
+          targetCalories: user.targetCalories ?? 2000,
+          targetProteinG: user.targetProteinG ?? 120,
+          targetCarbsG: user.targetCarbsG ?? 220,
+          targetFatG: user.targetFatG ?? 60,
+          weightKg: user.weightKg ?? undefined,
         }
+      : undefined;
 
-        const today = new Date().toISOString().split('T')[0];
-        const log = await this.prisma.mealLog.findUnique({
-          where: { userId_date: { userId, date: today } },
-          include: { entries: true },
-        });
+    // Fetch authoritative today's meal log from database
+    const now = new Date();
+    const todayDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const log = await this.prisma.mealLog.findUnique({
+      where: { userId_date: { userId, date: todayDate } },
+      include: { entries: true },
+    });
 
-        if (log && log.entries) {
-          todaySummary = {
-            consumedCalories: log.entries.reduce((sum, e) => sum + e.loggedCaloriesKcal, 0),
-            consumedProtein: log.entries.reduce((sum, e) => sum + e.loggedProteinG, 0),
-            consumedCarbs: log.entries.reduce((sum, e) => sum + e.loggedCarbohydratesG, 0),
-            consumedFat: log.entries.reduce((sum, e) => sum + e.loggedFatG, 0),
+    const todaySummary =
+      log && log.entries && log.entries.length > 0
+        ? {
+            consumedCalories: Math.round(
+              log.entries.reduce((sum, e) => sum + e.loggedCaloriesKcal, 0),
+            ),
+            consumedProtein: Math.round(
+              log.entries.reduce((sum, e) => sum + e.loggedProteinG, 0),
+            ),
+            consumedCarbs: Math.round(
+              log.entries.reduce((sum, e) => sum + e.loggedCarbohydratesG, 0),
+            ),
+            consumedFat: Math.round(
+              log.entries.reduce((sum, e) => sum + e.loggedFatG, 0),
+            ),
             mealsCount: log.entries.length,
-          };
-        }
-      } catch (err) {
-        // Safe database lookup fallback
-      }
-    }
+          }
+        : undefined;
 
-    return this.aiService.askCoach(message, userContext, todaySummary);
+    return this.aiService.askCoach(trimmed, userContext, todaySummary);
   }
 
   @Post('parse-prompt')
-  async parsePrompt(@Body('prompt') prompt: string) {
-    if (!prompt || !prompt.trim()) {
-      throw new BadRequestException('prompt parameter is required');
+  async parsePrompt(@Req() req: AuthenticatedRequest, @Body('prompt') prompt: string) {
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      throw new BadRequestException('prompt string parameter is required and cannot be empty');
     }
-    return this.aiService.parsePrompt(prompt);
+
+    const trimmed = prompt.trim();
+    if (trimmed.length > 500) {
+      throw new BadRequestException('prompt length exceeds maximum allowed limit of 500 characters');
+    }
+
+    await this.enforceRateLimit(req.user.id);
+
+    return this.aiService.parsePrompt(trimmed);
   }
 
   @Post('scan-image')
-  async scanImage(@Body('imageBase64') imageBase64: string) {
-    if (!imageBase64) {
-      throw new BadRequestException('imageBase64 parameter is required');
+  async scanImage(@Req() req: AuthenticatedRequest, @Body('imageBase64') imageBase64: string) {
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      throw new BadRequestException('imageBase64 string parameter is required');
     }
+
+    // Maximum payload limit of 7MB in base64 string (~5MB decoded binary image)
+    if (imageBase64.length > 7000000) {
+      throw new BadRequestException('Image payload exceeds maximum 5MB size limit');
+    }
+
+    if (imageBase64.length < 50) {
+      throw new BadRequestException('Image payload is too small or invalid');
+    }
+
+    // MIME type validation if data URI is provided
+    if (imageBase64.startsWith('data:')) {
+      const isSupportedMime = /^data:image\/(jpeg|jpg|png|webp|heic);base64,/i.test(imageBase64);
+      if (!isSupportedMime) {
+        throw new BadRequestException(
+          'Unsupported image format. Allowed image formats: JPEG, PNG, WEBP, HEIC',
+        );
+      }
+    }
+
+    await this.enforceRateLimit(req.user.id);
+
     return this.aiService.scanImage(imageBase64);
   }
 }

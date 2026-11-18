@@ -1,14 +1,11 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { PrismaModule } from '../prisma/prisma.module';
+import { RedisModule } from '../redis/redis.module';
 
 @Module({
-  imports: [
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-key-123',
-    }),
-  ],
+  imports: [PrismaModule, RedisModule],
   controllers: [AiController],
   providers: [AiService],
   exports: [AiService],

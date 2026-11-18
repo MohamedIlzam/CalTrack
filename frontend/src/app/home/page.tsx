@@ -696,7 +696,7 @@ export default function HomePage() {
                     slotKey={slot}
                     slotLabel={capitalize(slot)}
                     entries={mealEntries}
-                    mealIcon={MEAL_ICONS[slot]}
+                    mealIcon={MEAL_ICONS[slot] || "🍽️"}
                     onDeleteEntry={handleDeleteEntry}
                     onEditMeal={(s) => router.push(`/search?meal=${s}`)}
                   />

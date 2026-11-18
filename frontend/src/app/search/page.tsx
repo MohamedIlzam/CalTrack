@@ -86,13 +86,15 @@ const fetchFoods = async (q: string): Promise<Food[]> => {
     else if (d.category === "Sides") { emoji = "🥗"; chipColor = "#2C7A45"; }
     else if (d.category === "Extras") { emoji = "🥚"; chipColor = "#F4D03F"; }
     
+    const servingMultiplier = (d.unitConversions?.[0]?.gramEquivalent || 100) / 100;
+
     return {
       id: d.id,
       name: d.name,
-      kcalPerServing: d.caloriesKcal,
-      proteinPerServing: d.proteinG,
-      carbsPerServing: d.carbohydratesG,
-      fatPerServing: d.fatG,
+      kcalPerServing: Math.round(d.caloriesKcal * servingMultiplier),
+      proteinPerServing: Math.round(d.proteinG * servingMultiplier * 10) / 10,
+      carbsPerServing: Math.round(d.carbohydratesG * servingMultiplier * 10) / 10,
+      fatPerServing: Math.round(d.fatG * servingMultiplier * 10) / 10,
       emoji,
       chipColor,
       category: d.category,
