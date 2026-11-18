@@ -1,11 +1,20 @@
 import { Controller, Get, Post, Patch, Delete, Body, Query, Param, UseGuards, Req, BadRequestException } from '@nestjs/common';
 import { MealService, LogFoodDto, UpdateMealEntryDto } from './meal.service';
+import { NutritionCalculatorService, MealPreviewDto } from '../food/nutrition-calculator.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('meal')
 @UseGuards(JwtAuthGuard)
 export class MealController {
-  constructor(private readonly mealService: MealService) {}
+  constructor(
+    private readonly mealService: MealService,
+    private readonly nutritionCalculator: NutritionCalculatorService,
+  ) {}
+
+  @Post('preview')
+  async previewMeal(@Body() dto: MealPreviewDto) {
+    return this.nutritionCalculator.calculateMeal(dto);
+  }
 
   @Get('daily')
   async getDailyLog(@Req() req: any, @Query('date') dateStr: string) {

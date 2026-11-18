@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MealService } from './meal.service';
 import { MealController } from './meal.controller';
+import { NutritionCalculatorService } from '../food/nutrition-calculator.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 
@@ -79,6 +80,7 @@ describe('MealService - Diary Persistence & Integrity Regressions', () => {
       controllers: [MealController],
       providers: [
         MealService,
+        NutritionCalculatorService,
         { provide: PrismaService, useValue: mockPrisma },
       ],
     }).compile();
