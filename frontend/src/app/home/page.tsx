@@ -256,7 +256,7 @@ function CollectiveMealCard({
   entries: FoodEntry[];
   mealIcon: string;
   onDeleteEntry: (id: string) => void;
-  onEditMeal: (slot: string) => void;
+  onEditMeal: (slot: string, entryId?: string) => void;
 }) {
   const allItems = useMemo(() => {
     const list: Array<{ id: string; entryId: string; name: string; qty: number; emoji: string }> = [];
@@ -301,10 +301,10 @@ function CollectiveMealCard({
   const totalFat = entries.reduce((s, e) => s + e.fat, 0);
 
   return (
-    <div className="relative mb-3 group cursor-pointer" onClick={() => onEditMeal(slotKey)}>
+    <div className="relative mb-3 group cursor-pointer" onClick={() => onEditMeal(slotKey, entries[0]?.id)}>
       {/* Top-Right Edit Meal Button */}
       <button
-        onClick={(e) => { e.stopPropagation(); onEditMeal(slotKey); }}
+        onClick={(e) => { e.stopPropagation(); onEditMeal(slotKey, entries[0]?.id); }}
         title={`Edit ${slotLabel}`}
         className="absolute top-2.5 right-9 z-20 px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
       >
@@ -314,9 +314,14 @@ function CollectiveMealCard({
         Edit
       </button>
 
-      {/* Top-Right Card Delete Button (deletes all entries in this meal slot) */}
+      {/* Top-Right Card Delete Button (deletes all entries in this meal slot with confirmation) */}
       <button
-        onClick={(e) => { e.stopPropagation(); entries.forEach(el => onDeleteEntry(el.id)); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (window.confirm(`Are you sure you want to remove all logged foods from ${slotLabel}?`)) {
+            entries.forEach(el => onDeleteEntry(el.id));
+          }
+        }}
         title={`Delete all ${slotLabel} items`}
         className="absolute -top-2 -right-2 z-20 w-7 h-7 rounded-full bg-red-500 text-white shadow-md flex items-center justify-center opacity-90 hover:opacity-100 hover:scale-110 active:scale-95 transition-all cursor-pointer"
       >
@@ -360,7 +365,13 @@ function CollectiveMealCard({
         {/* Right Side: Scrollable List of ALL Foods in this Meal Slot */}
         <div className="w-[58%] flex flex-col gap-[6px] max-h-[125px] overflow-y-auto no-scrollbar pl-1">
           {allItems.map((item, idx) => (
-            <div key={`${item.id}-${idx}`} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px] relative group/item" style={{ background: "rgba(255,255,255,0.12)" }}>
+            <div
+              key={`${item.id}-${idx}`}
+              onClick={(e) => { e.stopPropagation(); onEditMeal(slotKey, item.entryId); }}
+              className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px] relative group/item cursor-pointer hover:bg-white/20 transition-colors"
+              title={`Click to edit ${item.name}`}
+              style={{ background: "rgba(255,255,255,0.12)" }}
+            >
               <span className="text-[18px] leading-none">{item.emoji}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-bold text-white truncate leading-tight">{item.name}</p>
@@ -698,7 +709,7 @@ export default function HomePage() {
                     entries={mealEntries}
                     mealIcon={MEAL_ICONS[slot] || "🍽️"}
                     onDeleteEntry={handleDeleteEntry}
-                    onEditMeal={(s) => router.push(`/search?meal=${s}`)}
+                    onEditMeal={(s, entryId) => router.push(entryId ? `/search?meal=${s}&editEntryId=${entryId}` : `/search?meal=${s}`)}
                   />
 
                   <button

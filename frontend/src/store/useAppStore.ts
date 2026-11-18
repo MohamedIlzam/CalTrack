@@ -100,22 +100,26 @@ export const useAppStore = create<AppStore>()(
 
       clearEntries: () => set({ entries: [] }),
 
-      setAuth: (token, user) => set((state) => ({
-        ...state,
-        token,
-        email: user.email,
-        name: user.name,
-        goal: user.goal ? (user.goal.toLowerCase() as Goal) : state.goal,
-        weightKg: user.weightKg || state.weightKg,
-        targetWeightKg: user.targetWeightKg || state.targetWeightKg,
-        heightCm: user.heightCm || state.heightCm,
-        activityLevel: user.activityLevel ? (user.activityLevel.toLowerCase() as ActivityLevel) : state.activityLevel,
-        targetCalories: user.targetCalories || state.targetCalories,
-        targetProteinG: user.targetProteinG || state.targetProteinG,
-        targetCarbsG: user.targetCarbsG || state.targetCarbsG,
-        targetFatG: user.targetFatG || state.targetFatG,
-        hasOnboarded: true,
-      })),
+      setAuth: (token, user) => set((state) => {
+        const isDifferentUser = !state.email || state.email !== user.email;
+        return {
+          ...state,
+          token,
+          email: user.email,
+          name: user.name,
+          goal: user.goal ? (user.goal.toLowerCase() as Goal) : state.goal,
+          weightKg: user.weightKg || state.weightKg,
+          targetWeightKg: user.targetWeightKg || state.targetWeightKg,
+          heightCm: user.heightCm || state.heightCm,
+          activityLevel: user.activityLevel ? (user.activityLevel.toLowerCase() as ActivityLevel) : state.activityLevel,
+          targetCalories: user.targetCalories || state.targetCalories,
+          targetProteinG: user.targetProteinG || state.targetProteinG,
+          targetCarbsG: user.targetCarbsG || state.targetCarbsG,
+          targetFatG: user.targetFatG || state.targetFatG,
+          hasOnboarded: true,
+          entries: isDifferentUser ? [] : state.entries,
+        };
+      }),
 
       logout: () => set({
         hasOnboarded: false,

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
-import { useAppStore, type MealSlot } from "@/store/useAppStore";
+import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore";
 import { postLogMeal, deleteMealEntry, parseAiPrompt, scanMealImage } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -180,6 +180,7 @@ function SearchContent() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const paramMeal = (searchParams.get("meal") ?? "breakfast") as MealSlot;
+  const editEntryId = searchParams.get("editEntryId") || null;
   const addFoodEntry = useAppStore((s) => s.addFoodEntry);
 
   // ── UI state ─────────────────────────────────────────────────────────────────
@@ -215,78 +216,80 @@ function SearchContent() {
 
   // ── Effects ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (initializedMealRef.current === selectedMeal) return;
+    const key = `${selectedMeal}:${editEntryId || 'new'}`;
+    if (initializedMealRef.current === key) return;
 
-    const existingEntries = entries.filter(
-      (e) => e.meal === selectedMeal || (selectedMeal === "snacks" && e.meal === "snack")
-    );
+    if (editEntryId) {
+      const entryToEdit = entries.find((e) => e.id === editEntryId);
+      if (entryToEdit) {
+        const items: PlateItem[] = [];
 
-    if (existingEntries.length > 0) {
-      const entryToEdit = existingEntries.find((e) => e.ingredients && e.ingredients.length > 0) || existingEntries[0];
-      const items: PlateItem[] = [];
-
-      if (entryToEdit.ingredients && entryToEdit.ingredients.length > 0) {
-        entryToEdit.ingredients.forEach((ing) => {
-          const dbMatch = FOOD_DB.find(
-            (f) => f.id === ing.id || f.name.toLowerCase() === ing.name.toLowerCase()
-          );
-          items.push({
-            id: dbMatch ? dbMatch.id : (ing.id || `custom-${ing.name.toLowerCase()}`),
-            name: ing.name,
-            kcalPerServing: dbMatch ? dbMatch.kcalPerServing : Math.max(10, Math.round(entryToEdit.kcal / entryToEdit.ingredients!.length)),
-            proteinPerServing: dbMatch ? dbMatch.proteinPerServing : Math.max(1, Math.round(entryToEdit.protein / entryToEdit.ingredients!.length)),
-            carbsPerServing: dbMatch ? dbMatch.carbsPerServing : Math.max(1, Math.round(entryToEdit.carbs / entryToEdit.ingredients!.length)),
-            fatPerServing: dbMatch ? dbMatch.fatPerServing : Math.max(1, Math.round(entryToEdit.fat / entryToEdit.ingredients!.length)),
-            emoji: dbMatch ? dbMatch.emoji : "🍽️",
-            chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
-            category: dbMatch ? dbMatch.category : "Custom",
-            qty: ing.qty ?? entryToEdit.qty ?? 1,
+        if (entryToEdit.ingredients && entryToEdit.ingredients.length > 0) {
+          entryToEdit.ingredients.forEach((ing) => {
+            const dbMatch = FOOD_DB.find(
+              (f) => f.id === ing.id || f.name.toLowerCase() === ing.name.toLowerCase()
+            );
+            items.push({
+              id: dbMatch ? dbMatch.id : (ing.id || `custom-${ing.name.toLowerCase()}`),
+              name: ing.name,
+              kcalPerServing: dbMatch ? dbMatch.kcalPerServing : Math.max(10, Math.round(entryToEdit.kcal / entryToEdit.ingredients!.length)),
+              proteinPerServing: dbMatch ? dbMatch.proteinPerServing : Math.max(1, Math.round(entryToEdit.protein / entryToEdit.ingredients!.length)),
+              carbsPerServing: dbMatch ? dbMatch.carbsPerServing : Math.max(1, Math.round(entryToEdit.carbs / entryToEdit.ingredients!.length)),
+              fatPerServing: dbMatch ? dbMatch.fatPerServing : Math.max(1, Math.round(entryToEdit.fat / entryToEdit.ingredients!.length)),
+              emoji: dbMatch ? dbMatch.emoji : "🍽️",
+              chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
+              category: dbMatch ? dbMatch.category : "Custom",
+              qty: ing.qty ?? entryToEdit.qty ?? 1,
+            });
           });
-        });
-      } else if (entryToEdit.name && entryToEdit.name.includes(",")) {
-        const parts = entryToEdit.name.split(",").map((p) => p.trim()).filter(Boolean);
-        parts.forEach((itemName) => {
+        } else if (entryToEdit.name && entryToEdit.name.includes(",")) {
+          const parts = entryToEdit.name.split(",").map((p) => p.trim()).filter(Boolean);
+          parts.forEach((itemName) => {
+            const dbMatch = FOOD_DB.find(
+              (f) => f.name.toLowerCase() === itemName.toLowerCase()
+            );
+            items.push({
+              id: dbMatch ? dbMatch.id : `custom-${itemName.toLowerCase()}`,
+              name: itemName,
+              kcalPerServing: dbMatch ? dbMatch.kcalPerServing : 150,
+              proteinPerServing: dbMatch ? dbMatch.proteinPerServing : 5,
+              carbsPerServing: dbMatch ? dbMatch.carbsPerServing : 25,
+              fatPerServing: dbMatch ? dbMatch.fatPerServing : 4,
+              emoji: dbMatch ? dbMatch.emoji : "🍽️",
+              chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
+              category: dbMatch ? dbMatch.category : "Custom",
+              qty: entryToEdit.qty ?? 1,
+            });
+          });
+        } else {
           const dbMatch = FOOD_DB.find(
-            (f) => f.name.toLowerCase() === itemName.toLowerCase()
+            (f) => f.id === entryToEdit.id || f.name.toLowerCase() === entryToEdit.name.toLowerCase()
           );
           items.push({
-            id: dbMatch ? dbMatch.id : `custom-${itemName.toLowerCase()}`,
-            name: itemName,
-            kcalPerServing: dbMatch ? dbMatch.kcalPerServing : 150,
-            proteinPerServing: dbMatch ? dbMatch.proteinPerServing : 5,
-            carbsPerServing: dbMatch ? dbMatch.carbsPerServing : 25,
-            fatPerServing: dbMatch ? dbMatch.fatPerServing : 4,
+            id: dbMatch ? dbMatch.id : entryToEdit.id,
+            name: entryToEdit.name,
+            kcalPerServing: dbMatch ? dbMatch.kcalPerServing : entryToEdit.kcal,
+            proteinPerServing: dbMatch ? dbMatch.proteinPerServing : entryToEdit.protein,
+            carbsPerServing: dbMatch ? dbMatch.carbsPerServing : entryToEdit.carbs,
+            fatPerServing: dbMatch ? dbMatch.fatPerServing : entryToEdit.fat,
             emoji: dbMatch ? dbMatch.emoji : "🍽️",
             chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
             category: dbMatch ? dbMatch.category : "Custom",
             qty: entryToEdit.qty ?? 1,
           });
-        });
-      } else {
-        const dbMatch = FOOD_DB.find(
-          (f) => f.id === entryToEdit.id || f.name.toLowerCase() === entryToEdit.name.toLowerCase()
-        );
-        items.push({
-          id: dbMatch ? dbMatch.id : entryToEdit.id,
-          name: entryToEdit.name,
-          kcalPerServing: dbMatch ? dbMatch.kcalPerServing : entryToEdit.kcal,
-          proteinPerServing: dbMatch ? dbMatch.proteinPerServing : entryToEdit.protein,
-          carbsPerServing: dbMatch ? dbMatch.carbsPerServing : entryToEdit.carbs,
-          fatPerServing: dbMatch ? dbMatch.fatPerServing : entryToEdit.fat,
-          emoji: dbMatch ? dbMatch.emoji : "🍽️",
-          chipColor: dbMatch ? dbMatch.chipColor : "#006B5F",
-          category: dbMatch ? dbMatch.category : "Custom",
-          qty: entryToEdit.qty ?? 1,
-        });
-      }
+        }
 
-      setPlateItems(items);
+        setPlateItems(items);
+      } else {
+        setPlateItems([]);
+      }
     } else {
+      // Ordinary Add Food: always start with a clean, empty plate
       setPlateItems([]);
     }
 
-    initializedMealRef.current = selectedMeal;
-  }, [selectedMeal, entries]);
+    initializedMealRef.current = key;
+  }, [selectedMeal, editEntryId, entries]);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -366,23 +369,27 @@ function SearchContent() {
   const totalFat     = Math.round(plateItems.reduce((s, i) => s + i.fatPerServing * i.qty, 0));
   // ── Save meal ────────────────────────────────────────────────────────────────
   async function handleSaveMeal() {
+    if (plateItems.length === 0) return;
     const dateStr = new Date().toISOString().split("T")[0];
-
-    // Clear previous entries for this meal slot when editing/updating
-    const store = useAppStore.getState();
-    const oldEntries = store.entries.filter(
-      (e) => e.meal === selectedMeal || (selectedMeal === "snacks" && e.meal === "snack")
-    );
-    oldEntries.forEach((e) => {
-      store.removeFoodEntry(e.id);
-      deleteMealEntry(e.id).catch(() => {});
-    });
 
     // Map UI meal slot to backend enum
     let apiMeal: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACKS' = 'BREAKFAST';
     if (selectedMeal === 'lunch') apiMeal = 'LUNCH';
     else if (selectedMeal === 'dinner') apiMeal = 'DINNER';
     else if (selectedMeal === 'snack' || selectedMeal === 'snacks') apiMeal = 'SNACKS';
+
+    // If editing a specific existing entry, remove ONLY that specific entry
+    if (editEntryId) {
+      const store = useAppStore.getState();
+      store.removeFoodEntry(editEntryId);
+      deleteMealEntry(editEntryId).catch((err) => {
+        console.error("Failed to delete entry being replaced:", err);
+      });
+    }
+
+    let postPayload: any;
+    let tempEntry: FoodEntry;
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
     if (plateItems.length === 1) {
       const item = plateItems[0];
@@ -393,9 +400,8 @@ function SearchContent() {
       const servingStr = item.qty === 1 ? "1 serving" : `${item.qty} servings`;
       const ingredients = [{ id: item.id, name: item.name, qty: item.qty }];
       const unitNamePayload = JSON.stringify({ name: item.name, ingredients });
-      const tempId = `${Date.now()}-${Math.random()}-${item.id}`;
 
-      addFoodEntry({
+      tempEntry = {
         id: tempId,
         meal: selectedMeal,
         name: item.name,
@@ -406,38 +412,27 @@ function SearchContent() {
         serving: servingStr,
         qty: item.qty,
         ingredients,
-      });
+      };
 
-      try {
-        const savedEntry = await postLogMeal({
-          date: dateStr,
-          foodId: item.id.startsWith('ai-') ? undefined : item.id,
-          meal: apiMeal,
-          servingQuantity: item.qty,
-          unitName: unitNamePayload,
-          loggedWeightGrams: item.qty * 100,
-          loggedCaloriesKcal: kcal,
-          loggedProteinG: protein,
-          loggedCarbohydratesG: carbs,
-          loggedFatG: fat,
-        });
-
-        if (savedEntry && savedEntry.id) {
-          useAppStore.setState((s) => ({
-            entries: s.entries.map((e) => e.id === tempId ? { ...e, id: savedEntry.id } : e)
-          }));
-        }
-      } catch (err) {
-        console.error("Failed to persist meal log to backend:", err);
-      }
-    } else if (plateItems.length > 1) {
+      postPayload = {
+        date: dateStr,
+        foodId: item.id.startsWith('ai-') || item.id.startsWith('custom-') ? undefined : item.id,
+        meal: apiMeal,
+        servingQuantity: item.qty,
+        unitName: unitNamePayload,
+        loggedWeightGrams: item.qty * 100,
+        loggedCaloriesKcal: kcal,
+        loggedProteinG: protein,
+        loggedCarbohydratesG: carbs,
+        loggedFatG: fat,
+      };
+    } else {
       const comboName = plateItems.map(i => i.name).join(", ");
       const servingStr = `${plateItems.length} items`;
       const ingredients = plateItems.map(i => ({ id: i.id, name: i.name, qty: i.qty }));
       const unitNamePayload = JSON.stringify({ name: comboName, ingredients });
-      const tempId = `${Date.now()}-${Math.random()}`;
 
-      addFoodEntry({
+      tempEntry = {
         id: tempId,
         meal: selectedMeal,
         name: comboName,
@@ -447,32 +442,41 @@ function SearchContent() {
         fat: totalFat,
         serving: servingStr,
         ingredients,
-      });
+      };
 
-      try {
-        const savedEntry = await postLogMeal({
-          date: dateStr,
-          meal: apiMeal,
-          servingQuantity: 1,
-          unitName: unitNamePayload,
-          loggedWeightGrams: plateItems.length * 100,
-          loggedCaloriesKcal: totalKcal,
-          loggedProteinG: totalProtein,
-          loggedCarbohydratesG: totalCarbs,
-          loggedFatG: totalFat,
-        });
-
-        if (savedEntry && savedEntry.id) {
-          useAppStore.setState((s) => ({
-            entries: s.entries.map((e) => e.id === tempId ? { ...e, id: savedEntry.id } : e)
-          }));
-        }
-      } catch (err) {
-        console.warn("Could not persist meal log to backend API, saved locally:", err);
-      }
+      postPayload = {
+        date: dateStr,
+        meal: apiMeal,
+        servingQuantity: 1,
+        unitName: unitNamePayload,
+        loggedWeightGrams: plateItems.length * 100,
+        loggedCaloriesKcal: totalKcal,
+        loggedProteinG: totalProtein,
+        loggedCarbohydratesG: totalCarbs,
+        loggedFatG: totalFat,
+      };
     }
 
-    queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
+    // Optimistically add entry so the UI responds immediately
+    addFoodEntry(tempEntry);
+
+    try {
+      const savedEntry = await postLogMeal(postPayload);
+      if (savedEntry && savedEntry.id) {
+        useAppStore.setState((s) => ({
+          entries: s.entries.map((e) => (e.id === tempId ? { ...e, id: savedEntry.id } : e)),
+        }));
+      }
+    } catch (err: any) {
+      console.error("Failed to persist meal log to backend:", err);
+      // Revert optimistic add if PostgreSQL persistence failed
+      useAppStore.getState().removeFoodEntry(tempId);
+      alert(err?.message || "Failed to log food entry. Please check your connection and try again.");
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
+    setPlateItems([]);
     router.push("/home");
   }
 
