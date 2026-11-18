@@ -56,6 +56,7 @@ interface Actions {
   setOnboarding: (data: Partial<OnboardingState>) => void;
   completeOnboarding: () => void;
   addFoodEntry: (entry: FoodEntry) => void;
+  updateFoodEntry: (id: string, updated: Partial<FoodEntry>) => void;
   removeFoodEntry: (id: string) => void;
   clearEntries: () => void;
   setAuth: (token: string, user: any) => void;
@@ -94,6 +95,11 @@ export const useAppStore = create<AppStore>()(
 
       addFoodEntry: (entry) =>
         set((state) => ({ entries: [...state.entries, entry] })),
+
+      updateFoodEntry: (id, updated) =>
+        set((state) => ({
+          entries: state.entries.map((e) => (e.id === id ? { ...e, ...updated } : e)),
+        })),
 
       removeFoodEntry: (id) =>
         set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),

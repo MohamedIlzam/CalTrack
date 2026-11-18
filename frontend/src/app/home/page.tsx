@@ -498,11 +498,16 @@ export default function HomePage() {
   }, [dailyLog]);
 
   const handleDeleteEntry = async (id: string) => {
+    const entryBackup = useAppStore.getState().entries.find((e) => e.id === id);
     removeFoodEntry(id);
     try {
       await deleteMealEntry(id);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete meal entry from backend:', err);
+      if (entryBackup) {
+        useAppStore.getState().addFoodEntry(entryBackup);
+      }
+      alert(err?.message || 'Failed to delete meal entry. Please check your connection and try again.');
     }
     queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
   };

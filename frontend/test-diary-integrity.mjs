@@ -17,6 +17,23 @@ async function mockPostLogMeal(payload, shouldFail = false) {
   return entry;
 }
 
+// Simulated updateMealEntry API (PATCH /meal/entry/:id)
+async function mockUpdateMealEntry(id, payload, failNetwork = false) {
+  if (failNetwork) {
+    throw new Error('Network failure: PATCH failed');
+  }
+  const entry = postgresMealLogEntries.find((e) => e.id === id);
+  if (!entry) {
+    throw new Error('MealLogEntry not found');
+  }
+  Object.assign(entry, {
+    meal: payload.meal || entry.meal,
+    unitName: payload.unitName || entry.unitName,
+    loggedCaloriesKcal: payload.loggedCaloriesKcal !== undefined ? payload.loggedCaloriesKcal : entry.loggedCaloriesKcal,
+  });
+  return { ...entry };
+}
+
 // Simulated deleteMealEntry API
 async function mockDeleteMealEntry(id) {
   const idx = postgresMealLogEntries.findIndex((e) => e.id === id);
@@ -50,6 +67,9 @@ function createTestStore() {
     addFoodEntry: (entry) => {
       state.entries = [...state.entries, entry];
     },
+    updateFoodEntry: (id, updated) => {
+      state.entries = state.entries.map((e) => (e.id === id ? { ...e, ...updated } : e));
+    },
     removeFoodEntry: (id) => {
       state.entries = state.entries.filter((e) => e.id !== id);
     },
@@ -79,10 +99,40 @@ async function simulateHandleSaveMeal({
   if (plateItems.length === 0) return;
   const dateStr = new Date().toISOString().split('T')[0];
 
-  // In Edit Mode ONLY, remove the single specific entry being replaced
+  // In Edit Mode, use atomic PATCH without deleting original entry
   if (editEntryId) {
-    store.removeFoodEntry(editEntryId);
-    await mockDeleteMealEntry(editEntryId);
+    const originalEntry = store.getState().entries.find((e) => e.id === editEntryId);
+    const first = plateItems[0];
+    const comboName = plateItems.map((i) => i.name).join(', ');
+    const updatedEntry = {
+      id: editEntryId,
+      meal: selectedMeal,
+      name: plateItems.length === 1 ? first.name : comboName,
+      kcal: plateItems.reduce((s, i) => s + i.kcal * i.qty, 0),
+      qty: 1,
+    };
+
+    // Optimistically update entry in store
+    store.updateFoodEntry(editEntryId, updatedEntry);
+
+    try {
+      const patched = await mockUpdateMealEntry(
+        editEntryId,
+        {
+          meal: selectedMeal.toUpperCase(),
+          unitName: updatedEntry.name,
+          loggedCaloriesKcal: updatedEntry.kcal,
+        },
+        failNetwork,
+      );
+      return { success: true, id: patched.id };
+    } catch (err) {
+      // Revert optimistic update to original entry if PostgreSQL update failed
+      if (originalEntry) {
+        store.updateFoodEntry(editEntryId, originalEntry);
+      }
+      return { success: false, error: err.message };
+    }
   }
 
   const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -246,21 +296,51 @@ async function runTests() {
     'Scenario 7: Failed save reverts optimistic entry and does not falsely display success',
   );
 
-  // Scenario 8: Explicit editing affects only the intended entry.
+  // Scenario 8: Explicit editing updates ONLY the target entry atomically and preserves original entry ID
   const breakfastToEdit = store.getState().entries.find((e) => e.name === 'Egg Hopper');
   const otherBreakfast = store.getState().entries.find((e) => e.name === 'Pol Sambol');
-  await simulateHandleSaveMeal({
+  const targetId = breakfastToEdit.id;
+
+  const editRes = await simulateHandleSaveMeal({
     store,
     plateItems: [{ id: 'food-a2', name: 'Double Egg Hopper', kcal: 320, qty: 1 }],
     selectedMeal: 'breakfast',
-    editEntryId: breakfastToEdit.id,
+    editEntryId: targetId,
   });
+
   const b8 = store.getState().entries.filter((e) => e.meal === 'breakfast');
+  const updatedPgEntry = postgresMealLogEntries.find((e) => e.id === targetId);
+
   assert(
-    b8.length === 2 &&
-      b8.some((e) => e.name === 'Double Egg Hopper') &&
-      b8.some((e) => e.id === otherBreakfast.id),
-    'Scenario 8: Explicit editing replaces ONLY the target entry without touching other entries in the slot',
+    editRes.success === true &&
+      editRes.id === targetId &&
+      b8.length === 2 &&
+      b8.some((e) => e.id === targetId && e.name === 'Double Egg Hopper' && e.kcal === 320) &&
+      b8.some((e) => e.id === otherBreakfast.id) &&
+      updatedPgEntry &&
+      updatedPgEntry.unitName === 'Double Egg Hopper' &&
+      updatedPgEntry.loggedCaloriesKcal === 320,
+    'Scenario 8: Atomic PATCH updates target entry preserving exact entry ID in both store and PostgreSQL',
+  );
+
+  // Scenario 8b: Failed edit (network error) preserves original entry in PostgreSQL and rolls back store
+  const editFailRes = await simulateHandleSaveMeal({
+    store,
+    plateItems: [{ id: 'food-a3', name: 'Broken Hopper Edit', kcal: 999, qty: 1 }],
+    selectedMeal: 'breakfast',
+    editEntryId: targetId,
+    failNetwork: true,
+  });
+
+  const b8b = store.getState().entries.filter((e) => e.meal === 'breakfast');
+  const pgEntryAfterFail = postgresMealLogEntries.find((e) => e.id === targetId);
+
+  assert(
+    editFailRes.success === false &&
+      b8b.find((e) => e.id === targetId).name === 'Double Egg Hopper' &&
+      pgEntryAfterFail.unitName === 'Double Egg Hopper' &&
+      pgEntryAfterFail.loggedCaloriesKcal === 320,
+    'Scenario 8b: Failed edit PATCH preserves original entry in PostgreSQL and reverts optimistic store update',
   );
 
   // Scenario 9: Switching authenticated users does not leak diary entries.

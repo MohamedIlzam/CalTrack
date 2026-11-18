@@ -88,6 +88,18 @@ export interface LogMealPayload {
   loggedFatG: number;
 }
 
+export interface UpdateMealPayload {
+  foodId?: string;
+  meal?: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACKS';
+  servingQuantity?: number;
+  unitName?: string;
+  loggedWeightGrams?: number;
+  loggedCaloriesKcal?: number;
+  loggedProteinG?: number;
+  loggedCarbohydratesG?: number;
+  loggedFatG?: number;
+}
+
 export async function postLogMeal(payload: LogMealPayload): Promise<ApiMealLogEntry> {
   const token = getAuthToken();
   const host = getBackendHost();
@@ -113,6 +125,36 @@ export async function postLogMeal(payload: LogMealPayload): Promise<ApiMealLogEn
     }
 
     throw new Error(errorData.message || 'Failed to log meal entry');
+  }
+
+  return res.json();
+}
+
+export async function updateMealEntry(id: string, payload: UpdateMealPayload): Promise<ApiMealLogEntry> {
+  const token = getAuthToken();
+  const host = getBackendHost();
+
+  const res = await fetch(`http://${host}:3001/meal/entry/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: res.statusText }));
+    console.error('updateMealEntry error response:', errorData);
+
+    if (res.status === 401) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+      }
+      useAppStore.getState().logout();
+    }
+
+    throw new Error(errorData.message || 'Failed to update meal entry');
   }
 
   return res.json();

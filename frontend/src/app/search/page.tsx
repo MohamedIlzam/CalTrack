@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore";
-import { postLogMeal, deleteMealEntry, parseAiPrompt, scanMealImage } from "@/lib/api";
+import { postLogMeal, deleteMealEntry, updateMealEntry, type UpdateMealPayload, parseAiPrompt, scanMealImage } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Food {
@@ -378,13 +378,95 @@ function SearchContent() {
     else if (selectedMeal === 'dinner') apiMeal = 'DINNER';
     else if (selectedMeal === 'snack' || selectedMeal === 'snacks') apiMeal = 'SNACKS';
 
-    // If editing a specific existing entry, remove ONLY that specific entry
+    // If editing an existing entry, perform atomic PATCH without deleting original entry
     if (editEntryId) {
-      const store = useAppStore.getState();
-      store.removeFoodEntry(editEntryId);
-      deleteMealEntry(editEntryId).catch((err) => {
-        console.error("Failed to delete entry being replaced:", err);
-      });
+      const originalEntry = entries.find((e) => e.id === editEntryId);
+      let patchPayload: UpdateMealPayload;
+      let updatedEntry: FoodEntry;
+
+      if (plateItems.length === 1) {
+        const item = plateItems[0];
+        const kcal = Math.round(item.kcalPerServing * item.qty);
+        const carbs = Math.round(item.carbsPerServing * item.qty);
+        const protein = Math.round(item.proteinPerServing * item.qty);
+        const fat = Math.round(item.fatPerServing * item.qty);
+        const servingStr = item.qty === 1 ? "1 serving" : `${item.qty} servings`;
+        const ingredients = [{ id: item.id, name: item.name, qty: item.qty }];
+        const unitNamePayload = JSON.stringify({ name: item.name, ingredients });
+
+        updatedEntry = {
+          id: editEntryId,
+          meal: selectedMeal,
+          name: item.name,
+          kcal,
+          carbs,
+          protein,
+          fat,
+          serving: servingStr,
+          qty: item.qty,
+          ingredients,
+        };
+
+        patchPayload = {
+          meal: apiMeal,
+          foodId: item.id.startsWith('ai-') || item.id.startsWith('custom-') ? undefined : item.id,
+          servingQuantity: item.qty,
+          unitName: unitNamePayload,
+          loggedWeightGrams: item.qty * 100,
+          loggedCaloriesKcal: kcal,
+          loggedProteinG: protein,
+          loggedCarbohydratesG: carbs,
+          loggedFatG: fat,
+        };
+      } else {
+        const comboName = plateItems.map(i => i.name).join(", ");
+        const servingStr = `${plateItems.length} items`;
+        const ingredients = plateItems.map(i => ({ id: i.id, name: i.name, qty: i.qty }));
+        const unitNamePayload = JSON.stringify({ name: comboName, ingredients });
+
+        updatedEntry = {
+          id: editEntryId,
+          meal: selectedMeal,
+          name: comboName,
+          kcal: totalKcal,
+          carbs: totalCarbs,
+          protein: totalProtein,
+          fat: totalFat,
+          serving: servingStr,
+          ingredients,
+        };
+
+        patchPayload = {
+          meal: apiMeal,
+          servingQuantity: 1,
+          unitName: unitNamePayload,
+          loggedWeightGrams: plateItems.length * 100,
+          loggedCaloriesKcal: totalKcal,
+          loggedProteinG: totalProtein,
+          loggedCarbohydratesG: totalCarbs,
+          loggedFatG: totalFat,
+        };
+      }
+
+      // Optimistically update entry in store
+      useAppStore.getState().updateFoodEntry(editEntryId, updatedEntry);
+
+      try {
+        await updateMealEntry(editEntryId, patchPayload);
+      } catch (err: any) {
+        console.error("Failed to update meal log on backend:", err);
+        // Rollback optimistic update if PostgreSQL persistence failed
+        if (originalEntry) {
+          useAppStore.getState().updateFoodEntry(editEntryId, originalEntry);
+        }
+        alert(err?.message || "Failed to update food entry. Original entry preserved.");
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
+      setPlateItems([]);
+      router.push("/home");
+      return;
     }
 
     let postPayload: any;
