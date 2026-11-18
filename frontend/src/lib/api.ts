@@ -269,6 +269,8 @@ export interface AiFoodSuggestion {
   emoji: string;
   chipColor: string;
   category: string;
+  portionDescription?: string;
+  isEstimate?: boolean;
 }
 
 export interface AiParseResponse {

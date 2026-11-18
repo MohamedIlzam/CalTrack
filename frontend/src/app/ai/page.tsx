@@ -5,12 +5,16 @@ import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { sendCoachChat } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
 
-type Message = {
+export type Message = {
   id: string;
-  role: "user" | "coach";
+  role: "user" | "coach" | "error";
   content: string;
   timestamp: string;
   card?: "daily-summary" | null;
+  errorDetails?: {
+    errorMessage: string;
+    lastPrompt: string;
+  };
 };
 
 const SUGGESTION_CHIPS = [
@@ -21,8 +25,27 @@ const SUGGESTION_CHIPS = [
   "Post-workout meal advice",
 ];
 
-/* ─────────────── Formatted Message Bubble ─────────────── */
-function FormattedText({ text }: { text: string }) {
+/* ─────────────── React-Safe Formatted Message Bubble ─────────────── */
+/**
+ * Safely parses inline markdown (bold **text**) into React elements.
+ * Treats all content as React text nodes, completely eliminating XSS / dangerouslySetInnerHTML risks.
+ */
+export function renderSafeInline(str: string): React.ReactNode[] {
+  const parts = str.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
+      const boldText = part.slice(2, -2);
+      return (
+        <strong key={i} className="font-bold text-[#006B5F]">
+          {boldText}
+        </strong>
+      );
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+}
+
+export function FormattedText({ text }: { text: string }) {
   const lines = text.split("\n");
 
   return (
@@ -37,38 +60,34 @@ function FormattedText({ text }: { text: string }) {
           return (
             <div key={idx} className="flex items-start gap-2 pl-1">
               <span className="w-1.5 h-1.5 rounded-full bg-[#006B5F] mt-2 flex-shrink-0" />
-              <span dangerouslySetInnerHTML={{ __html: formatBold(bulletContent) }} />
+              <span className="flex-1">{renderSafeInline(bulletContent)}</span>
             </div>
           );
         }
 
         // Numbered list
-        if (/^\d+\.\s+/.test(trimmed)) {
-          const num = trimmed.match(/^(\d+)\.\s+/)?.[1] || "1";
-          const listContent = trimmed.replace(/^\d+\.\s+/, "");
+        const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
+        if (numMatch) {
+          const num = numMatch[1];
+          const listContent = numMatch[2];
           return (
             <div key={idx} className="flex items-start gap-2 pl-1">
               <span className="w-5 h-5 rounded-full bg-[#2DD4BF]/20 text-[#006B5F] text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
                 {num}
               </span>
-              <span dangerouslySetInnerHTML={{ __html: formatBold(listContent) }} />
+              <span className="flex-1">{renderSafeInline(listContent)}</span>
             </div>
           );
         }
 
         return (
-          <p
-            key={idx}
-            dangerouslySetInnerHTML={{ __html: formatBold(trimmed) }}
-          />
+          <p key={idx}>
+            {renderSafeInline(trimmed)}
+          </p>
         );
       })}
     </div>
   );
-}
-
-function formatBold(str: string): string {
-  return str.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-[#006B5F]">$1</strong>');
 }
 
 /* ─────────────── Live Daily Snapshot Card ─────────────── */
@@ -142,7 +161,7 @@ export default function AIChatPage() {
   const initialWelcome = React.useMemo<Message>(() => ({
     id: "welcome",
     role: "coach",
-    content: `Hello ${userName ? userName : "there"}! 👋 I'm your CalTrack Nutrition Coach powered by Google Gemini AI.\n\nToday you've logged **${consumedKcal} / ${targetKcal} kcal**. Ask me anything about your meals, recipe ideas, macros, or energy balance!`,
+    content: `Hello ${userName ? userName : "there"}! 👋 I'm your CalTrack AI Nutrition Coach.\n\nToday you've logged **${consumedKcal} / ${targetKcal} kcal**. Ask me anything about your meals, recipe ideas, macros, or energy balance!`,
     timestamp: "Live",
     card: "daily-summary",
   }), [userName, consumedKcal, targetKcal]);
@@ -194,20 +213,24 @@ export default function AIChatPage() {
         }),
       };
       setMessages((prev) => [...prev, coachMsg]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Coach chat error:", err);
-      const coachMsg: Message = {
+      const errMsg = err?.message || "Unable to reach CalTrack AI. Please check your connection or try again.";
+      const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
-        role: "coach",
-        content:
-          "I'm experiencing a brief network lag. Keep focusing on your whole foods and daily protein goal! 🥗",
+        role: "error",
+        content: errMsg,
         timestamp: new Date().toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
           hour12: true,
         }),
+        errorDetails: {
+          errorMessage: errMsg,
+          lastPrompt: text,
+        },
       };
-      setMessages((prev) => [...prev, coachMsg]);
+      setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsThinking(false);
     }
@@ -261,8 +284,9 @@ export default function AIChatPage() {
               <h1 className="font-extrabold text-[#006B5F] text-[17px] tracking-tight leading-none">
                 AI Coach
               </h1>
-              <p className="text-[10px] font-semibold text-[#3C4A46]/70 mt-0.5">
-                Gemini 2.0 Flash
+              <p className="text-[10px] font-semibold text-[#006B5F] mt-0.5 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                CalTrack AI
               </p>
             </div>
           </div>
@@ -285,22 +309,72 @@ export default function AIChatPage() {
         ref={scrollRef}
         className="flex-1 overflow-y-auto pt-[86px] pb-[220px] px-5 space-y-6 max-w-md mx-auto w-full"
       >
-        {messages.map((msg) =>
-          msg.role === "user" ? (
-            /* User Bubble */
-            <div
-              key={msg.id}
-              className="flex flex-col items-end space-y-1.5 ml-8 animate-in fade-in slide-in-from-bottom-2 duration-300"
-            >
-              <div className="bg-[#006B5F] text-white px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-sm text-[15px] leading-relaxed">
-                {msg.content}
+        {messages.map((msg) => {
+          if (msg.role === "user") {
+            return (
+              <div
+                key={msg.id}
+                className="flex flex-col items-end space-y-1.5 ml-8 animate-in fade-in slide-in-from-bottom-2 duration-300"
+              >
+                <div className="bg-[#006B5F] text-white px-5 py-3.5 rounded-2xl rounded-tr-sm shadow-sm text-[15px] leading-relaxed">
+                  {msg.content}
+                </div>
+                <span className="text-[10px] font-semibold text-[#555F6F]/70 uppercase tracking-[1.4px] px-1">
+                  You • {msg.timestamp}
+                </span>
               </div>
-              <span className="text-[10px] font-semibold text-[#555F6F]/70 uppercase tracking-[1.4px] px-1">
-                You • {msg.timestamp}
-              </span>
-            </div>
-          ) : (
-            /* Coach Bubble */
+            );
+          }
+
+          if (msg.role === "error") {
+            return (
+              <div
+                key={msg.id}
+                className="flex flex-col items-start space-y-2 mr-4 animate-in fade-in slide-in-from-bottom-2 duration-300 w-full"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center shadow-xs">
+                    <svg
+                      className="w-3.5 h-3.5 text-rose-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                  </div>
+                  <span className="text-[10px] font-bold text-rose-600 uppercase tracking-[1.4px]">
+                    AI Service Alert • {msg.timestamp}
+                  </span>
+                </div>
+
+                <div className="bg-rose-50/90 border border-rose-200/80 p-4 rounded-2xl rounded-tl-sm shadow-sm w-full space-y-3">
+                  <p className="text-[13.5px] text-rose-800 leading-relaxed font-medium">
+                    {msg.content}
+                  </p>
+                  {msg.errorDetails?.lastPrompt && (
+                    <button
+                      onClick={() => handleSendMessage(msg.errorDetails!.lastPrompt)}
+                      disabled={isThinking}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-[12px] font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Retry Request
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          return (
             <div
               key={msg.id}
               className="flex flex-col items-start space-y-3 mr-4 animate-in fade-in slide-in-from-bottom-2 duration-300"
@@ -334,8 +408,8 @@ export default function AIChatPage() {
               {/* Optional Rich Snapshot Card */}
               {msg.card === "daily-summary" && <DailySnapshotCard />}
             </div>
-          )
-        )}
+          );
+        })}
 
         {/* Coach Thinking Animation */}
         {isThinking && (

@@ -3,6 +3,7 @@ import {
   Post,
   Body,
   BadRequestException,
+  ServiceUnavailableException,
   UseGuards,
   Req,
   HttpException,
@@ -32,12 +33,22 @@ export class AiController {
 
   private async enforceRateLimit(userId: string): Promise<void> {
     const rateLimitKey = `ratelimit:ai:${userId}`;
-    // 15 requests per 60 seconds (protects free-tier Gemini API quota)
-    const { allowed } = await this.redisService.checkRateLimit(rateLimitKey, 15, 60);
-    if (!allowed) {
-      throw new HttpException(
-        'Rate limit reached: Maximum 15 AI requests per minute. Please wait a moment before trying again.',
-        HttpStatus.TOO_MANY_REQUESTS,
+    try {
+      // Fixed-window rate limiter: 15 requests per 60 seconds (protects free-tier Gemini API quota)
+      const { allowed } = await this.redisService.checkRateLimit(rateLimitKey, 15, 60);
+      if (!allowed) {
+        throw new HttpException(
+          'Rate limit reached: Maximum 15 AI requests per minute. Please wait a moment before trying again.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    } catch (err) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      // Fail closed: If Redis is unavailable or returns an error, reject request with HTTP 503
+      throw new ServiceUnavailableException(
+        'Rate limit service temporarily unavailable. Request blocked to protect API quotas. Please try again shortly.',
       );
     }
   }

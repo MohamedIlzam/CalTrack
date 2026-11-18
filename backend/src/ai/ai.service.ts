@@ -10,7 +10,8 @@ export interface FoodSuggestion {
   emoji: string;
   chipColor: string;
   category: string;
-  isEstimate?: boolean;
+  portionDescription?: string;
+  isEstimate: boolean;
 }
 
 export interface ParsePromptResult {
@@ -111,6 +112,7 @@ Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or
             type: Type.OBJECT,
             properties: {
               name: { type: Type.STRING, description: 'Canonical food or dish name' },
+              portionDescription: { type: Type.STRING, description: 'Sensible portion description, e.g. 1 plate, 1 cup, 1 piece' },
               kcalPerServing: { type: Type.NUMBER, description: 'Estimated calories in kcal per typical serving' },
               proteinPerServing: { type: Type.NUMBER, description: 'Estimated protein in grams' },
               carbsPerServing: { type: Type.NUMBER, description: 'Estimated carbohydrates in grams' },
@@ -128,40 +130,10 @@ Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or
       const rawText = response.text || '';
       const parsed = JSON.parse(rawText);
 
-      const kcal = Number(parsed.kcalPerServing);
-      const protein = Number(parsed.proteinPerServing);
-      const carbs = Number(parsed.carbsPerServing);
-      const fat = Number(parsed.fatPerServing);
-
-      // Strict runtime range validation
-      if (
-        isNaN(kcal) || kcal < 0 || kcal > 5000 ||
-        isNaN(protein) || protein < 0 || protein > 500 ||
-        isNaN(carbs) || carbs < 0 || carbs > 500 ||
-        isNaN(fat) || fat < 0 || fat > 500
-      ) {
-        this.logger.warn(`Model produced out-of-bounds nutrient values: ${JSON.stringify(parsed)}`);
-        throw new Error('Estimated nutrient values out of acceptable bounds');
-      }
-
-      const validCategories = ['Rice & Bread', 'Curries', 'Sides', 'Extras'];
-      const category = validCategories.includes(parsed.category) ? parsed.category : 'Custom';
-
-      const food: FoodSuggestion = {
-        id: `ai-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        name: (parsed.name || prompt).trim(),
-        kcalPerServing: Math.round(kcal),
-        proteinPerServing: Math.round(protein * 10) / 10,
-        carbsPerServing: Math.round(carbs * 10) / 10,
-        fatPerServing: Math.round(fat * 10) / 10,
-        emoji: parsed.emoji && parsed.emoji.length <= 4 ? parsed.emoji : this.getFoodEmoji(parsed.name || prompt),
-        chipColor: '#006B5F',
-        category,
-        isEstimate: true,
-      };
+      const food = this.validateFoodSuggestionOutput(parsed, prompt, 'ai');
 
       return {
-        text: `AI Nutritional Estimate (approximate): **${food.name}** (~${food.kcalPerServing} kcal, ${food.proteinPerServing}g P, ${food.carbsPerServing}g C, ${food.fatPerServing}g F). Tap "Add to Plate" to include it!`,
+        text: `AI Nutritional Estimate (approximate): **${food.name}** (~${food.kcalPerServing} kcal, ${food.proteinPerServing}g P, ${food.carbsPerServing}g C, ${food.fatPerServing}g F per ${food.portionDescription || 'serving'}). Tap "Add to Plate" to include it! Note: Values are AI estimates, not scientifically or medically verified data.`,
         suggestedFood: food,
       };
     } catch (err: any) {
@@ -208,6 +180,7 @@ Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or
             type: Type.OBJECT,
             properties: {
               name: { type: Type.STRING, description: 'Detected dish or meal name' },
+              portionDescription: { type: Type.STRING, description: 'Sensible portion description, e.g. 1 plate, 1 bowl, 1 piece' },
               kcalPerServing: { type: Type.NUMBER, description: 'Estimated calories in kcal' },
               proteinPerServing: { type: Type.NUMBER, description: 'Estimated protein in grams' },
               carbsPerServing: { type: Type.NUMBER, description: 'Estimated carbohydrates in grams' },
@@ -225,39 +198,10 @@ Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or
       const rawText = response.text || '';
       const parsed = JSON.parse(rawText);
 
-      const kcal = Number(parsed.kcalPerServing);
-      const protein = Number(parsed.proteinPerServing);
-      const carbs = Number(parsed.carbsPerServing);
-      const fat = Number(parsed.fatPerServing);
-
-      if (
-        isNaN(kcal) || kcal < 0 || kcal > 5000 ||
-        isNaN(protein) || protein < 0 || protein > 500 ||
-        isNaN(carbs) || carbs < 0 || carbs > 500 ||
-        isNaN(fat) || fat < 0 || fat > 500
-      ) {
-        this.logger.warn(`Model produced out-of-bounds vision nutrient values: ${JSON.stringify(parsed)}`);
-        throw new Error('Estimated vision nutrient values out of acceptable bounds');
-      }
-
-      const validCategories = ['Rice & Bread', 'Curries', 'Sides', 'Extras'];
-      const category = validCategories.includes(parsed.category) ? parsed.category : 'Custom';
-
-      const food: FoodSuggestion = {
-        id: `ai-img-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        name: (parsed.name || 'Scanned Meal Plate').trim(),
-        kcalPerServing: Math.round(kcal),
-        proteinPerServing: Math.round(protein * 10) / 10,
-        carbsPerServing: Math.round(carbs * 10) / 10,
-        fatPerServing: Math.round(fat * 10) / 10,
-        emoji: parsed.emoji && parsed.emoji.length <= 4 ? parsed.emoji : '📸',
-        chipColor: '#006B5F',
-        category,
-        isEstimate: true,
-      };
+      const food = this.validateFoodSuggestionOutput(parsed, 'Scanned Meal Plate', 'ai-img');
 
       return {
-        text: `AI Photo Scan Estimate (approximate): Detected **${food.name}** (~${food.kcalPerServing} kcal, ${food.proteinPerServing}g P, ${food.carbsPerServing}g C, ${food.fatPerServing}g F). Tap "Add to Plate" to include it!`,
+        text: `AI Photo Scan Estimate (approximate): Detected **${food.name}** (~${food.kcalPerServing} kcal, ${food.proteinPerServing}g P, ${food.carbsPerServing}g C, ${food.fatPerServing}g F per ${food.portionDescription || 'serving'}). Tap "Add to Plate" to include it! Note: Values are AI estimates, not scientifically or medically verified data.`,
         suggestedFood: food,
       };
     } catch (err: any) {
@@ -266,6 +210,79 @@ Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or
         'AI photo analysis is temporarily unavailable. Please try another photo or enter food manually.',
       );
     }
+  }
+
+  /**
+   * Strictly validates that the LLM output conforms to schema and physical reality.
+   * Rejects empty names, non-finite or negative numbers, unreasonable calories/macros,
+   * and sanitizes categories and portions.
+   */
+  public validateFoodSuggestionOutput(
+    parsed: any,
+    fallbackPrompt: string,
+    idPrefix: string = 'ai',
+  ): FoodSuggestion {
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('AI output must be a non-null JSON object');
+    }
+
+    // 1. Non-empty, valid name validation
+    const rawName = typeof parsed.name === 'string' ? parsed.name.trim() : '';
+    const name = rawName.length > 0 ? rawName.slice(0, 100) : fallbackPrompt.trim().slice(0, 100);
+    if (!name) {
+      throw new Error('AI food suggestion must have a non-empty name');
+    }
+
+    // 2. Numeric finiteness and range checks
+    const kcal = parsed.kcalPerServing;
+    const protein = parsed.proteinPerServing;
+    const carbs = parsed.carbsPerServing;
+    const fat = parsed.fatPerServing;
+
+    if (
+      !Number.isFinite(kcal) ||
+      !Number.isFinite(protein) ||
+      !Number.isFinite(carbs) ||
+      !Number.isFinite(fat)
+    ) {
+      throw new Error('AI nutrient values must be valid finite numbers');
+    }
+
+    if (kcal < 0 || kcal > 5000) {
+      throw new Error(`Estimated calories (${kcal} kcal) out of realistic range (0-5000)`);
+    }
+
+    if (protein < 0 || protein > 500 || carbs < 0 || carbs > 500 || fat < 0 || fat > 500) {
+      throw new Error('Estimated macronutrient grams out of realistic range (0-500g)');
+    }
+
+    // 3. Category validation
+    const validCategories = ['Rice & Bread', 'Curries', 'Sides', 'Extras'];
+    const category = validCategories.includes(parsed.category) ? parsed.category : 'Custom';
+
+    // 4. Sensible portion description
+    const rawPortion = typeof parsed.portionDescription === 'string' ? parsed.portionDescription.trim() : '';
+    const portionDescription = rawPortion && rawPortion.length <= 50 ? rawPortion : '1 serving';
+
+    // 5. Emoji validation
+    const emoji =
+      typeof parsed.emoji === 'string' && parsed.emoji.trim().length > 0 && parsed.emoji.trim().length <= 4
+        ? parsed.emoji.trim()
+        : this.getFoodEmoji(name);
+
+    return {
+      id: `${idPrefix}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name,
+      kcalPerServing: Math.round(kcal),
+      proteinPerServing: Math.round(protein * 10) / 10,
+      carbsPerServing: Math.round(carbs * 10) / 10,
+      fatPerServing: Math.round(fat * 10) / 10,
+      emoji,
+      chipColor: '#006B5F',
+      category,
+      portionDescription,
+      isEstimate: true,
+    };
   }
 
   // Deterministic local emoji mapping utility (preserved for consistency)

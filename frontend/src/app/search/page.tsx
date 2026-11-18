@@ -18,18 +18,23 @@ interface Food {
   emoji: string;
   chipColor: string;
   category: string;
+  portionDescription?: string;
+  isEstimate?: boolean;
 }
 
 interface PlateItem extends Food {
   qty: number;
 }
 
-type AiRole = "user" | "ai";
+type AiRole = "user" | "ai" | "error";
 interface AiMessage {
   id: string;
   role: AiRole;
   text: string;
   suggestedFood?: Food;
+  errorDetails?: {
+    lastPrompt?: string;
+  };
 }
 
 // ─── Food Database (Fallback/Default) ─────────────────────────────────────────
@@ -484,8 +489,8 @@ function SearchContent() {
     setTimeout(() => aiInputRef.current?.focus(), 350);
   }
 
-  async function sendAiMessage() {
-    const text = aiInput.trim();
+  async function sendAiMessage(promptText?: string) {
+    const text = (promptText || aiInput).trim();
     if (!text || aiThinking) return;
     const userMsg: AiMessage = { id: `u-${Date.now()}`, role: "user", text };
     setAiMessages((prev) => [...prev, userMsg]);
@@ -503,14 +508,16 @@ function SearchContent() {
           suggestedFood: res.suggestedFood,
         },
       ]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("AI parse prompt failed:", err);
+      const errMsg = err?.message || "Failed to analyze meal description. Please try again.";
       setAiMessages((prev) => [
         ...prev,
         {
-          id: `a-${Date.now()}`,
-          role: "ai",
-          text: "I couldn't analyze that meal description. Please try again!",
+          id: `err-${Date.now()}`,
+          role: "error",
+          text: errMsg,
+          errorDetails: { lastPrompt: text },
         },
       ]);
     } finally {
@@ -545,14 +552,15 @@ function SearchContent() {
               suggestedFood: res.suggestedFood,
             },
           ]);
-        } catch (err) {
+        } catch (err: any) {
           console.error("AI photo scan failed:", err);
+          const errMsg = err?.message || "Could not scan meal photo. Please try uploading again.";
           setAiMessages((prev) => [
             ...prev,
             {
-              id: `a-${Date.now()}`,
-              role: "ai",
-              text: "Could not scan meal photo. Please try uploading again!",
+              id: `err-img-${Date.now()}`,
+              role: "error",
+              text: errMsg,
             },
           ]);
         } finally {
@@ -975,22 +983,58 @@ function SearchContent() {
                   </svg>
                 </div>
               )}
-              <div className={`max-w-[80%] flex flex-col gap-2 ${msg.role === "user" ? "items-end" : "items-start"}`}>
+              {msg.role === "error" && (
+                <div className="w-7 h-7 rounded-full bg-rose-100 flex-shrink-0 flex items-center justify-center mt-0.5">
+                  <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              )}
+              <div className={`max-w-[85%] flex flex-col gap-2 ${msg.role === "user" ? "items-end" : "items-start"}`}>
                 <div
                   className="px-3 py-[9px] rounded-[16px] text-[13px] leading-snug"
                   style={{
-                    background: msg.role === "user" ? "#006B5F" : "#EEF3F2",
-                    color: msg.role === "user" ? "#ffffff" : "#1A1C1C",
+                    background: msg.role === "user" ? "#006B5F" : msg.role === "error" ? "#FEF2F2" : "#EEF3F2",
+                    color: msg.role === "user" ? "#ffffff" : msg.role === "error" ? "#991B1B" : "#1A1C1C",
+                    border: msg.role === "error" ? "1px solid #FECACA" : "none",
                     borderRadius: msg.role === "user"
                       ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                   }}
                 >
                   {msg.text}
+                  {msg.role === "error" && msg.errorDetails?.lastPrompt && (
+                    <div className="mt-2 pt-2 border-t border-rose-200">
+                      <button
+                        onClick={() => sendAiMessage(msg.errorDetails!.lastPrompt)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:text-rose-900 underline cursor-pointer"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Retry Analysis
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* AI-generated ingredient card */}
                 {msg.suggestedFood && (
                   <div className="w-full bg-white rounded-[18px] p-3 border border-[#BACAC5]/20 shadow-sm">
+                    {/* Badge showing AI Estimate */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                        <svg className="w-3 h-3 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        AI Estimate (Approximate)
+                      </span>
+                      {msg.suggestedFood.portionDescription && (
+                        <span className="text-[11px] font-medium text-gray-500">
+                          {msg.suggestedFood.portionDescription}
+                        </span>
+                      )}
+                    </div>
+
                     <div className="flex items-center gap-3 mb-3">
                       <div
                         className="w-[44px] h-[44px] rounded-[12px] flex-shrink-0 flex items-center justify-center text-[22px]"
@@ -1020,7 +1064,7 @@ function SearchContent() {
                     <button
                       onClick={() => addAiFoodToPlate(msg.suggestedFood!)}
                       className="w-full py-[10px] rounded-[13px] bg-[#006B5F] text-white
-                        text-[13px] font-bold active:bg-[#00574D] transition-colors flex items-center justify-center gap-1.5"
+                        text-[13px] font-bold active:bg-[#00574D] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                         strokeWidth={2.5} strokeLinecap="round">
@@ -1028,6 +1072,9 @@ function SearchContent() {
                       </svg>
                       Add to Plate
                     </button>
+                    <p className="text-[9.5px] text-gray-400 mt-2 text-center">
+                      ⚠️ Values are AI estimates, not scientifically verified data.
+                    </p>
                   </div>
                 )}
               </div>
@@ -1089,7 +1136,7 @@ function SearchContent() {
             />
 
             <button
-              onClick={sendAiMessage}
+              onClick={() => sendAiMessage()}
               disabled={!aiInput.trim() || aiThinking}
               className="w-[34px] h-[34px] rounded-full flex items-center justify-center flex-shrink-0 transition-all"
               style={{
