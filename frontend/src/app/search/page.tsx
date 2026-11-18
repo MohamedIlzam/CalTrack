@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore";
 import { postLogMeal, deleteMealEntry, updateMealEntry, type UpdateMealPayload, parseAiPrompt, scanMealImage } from "@/lib/api";
+import { MealPlateCard } from "@/components/meal/MealPlateCard";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Food {
@@ -191,6 +192,8 @@ function SearchContent() {
   // ── Plate state ──────────────────────────────────────────────────────────────
   const [plateItems, setPlateItems] = useState<PlateItem[]>([]);
   const [selectedMeal, setSelectedMeal] = useState<MealSlot>(paramMeal);
+  const [isSavingMeal, setIsSavingMeal] = useState(false);
+  const [saveMealError, setSaveMealError] = useState<string | null>(null);
 
   // ── AI state ─────────────────────────────────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false);
@@ -370,6 +373,8 @@ function SearchContent() {
   // ── Save meal ────────────────────────────────────────────────────────────────
   async function handleSaveMeal() {
     if (plateItems.length === 0) return;
+    setIsSavingMeal(true);
+    setSaveMealError(null);
     const dateStr = new Date().toISOString().split("T")[0];
 
     // Map UI meal slot to backend enum
@@ -459,11 +464,14 @@ function SearchContent() {
         if (originalEntry) {
           useAppStore.getState().updateFoodEntry(editEntryId, originalEntry);
         }
-        alert(err?.message || "Failed to update food entry. Original entry preserved.");
+        const errorMsg = err?.message || "Failed to update food entry. Original entry preserved.";
+        setSaveMealError(errorMsg);
+        setIsSavingMeal(false);
         return;
       }
 
       await queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
+      setIsSavingMeal(false);
       setPlateItems([]);
       router.push("/home");
       return;
@@ -553,11 +561,14 @@ function SearchContent() {
       console.error("Failed to persist meal log to backend:", err);
       // Revert optimistic add if PostgreSQL persistence failed
       useAppStore.getState().removeFoodEntry(tempId);
-      alert(err?.message || "Failed to log food entry. Please check your connection and try again.");
+      const errorMsg = err?.message || "Failed to log food entry. Please check your connection and try again.";
+      setSaveMealError(errorMsg);
+      setIsSavingMeal(false);
       return;
     }
 
     await queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
+    setIsSavingMeal(false);
     setPlateItems([]);
     router.push("/home");
   }
@@ -893,112 +904,50 @@ function SearchContent() {
       )}
 
       {/* ── Condensed Vitality & Save Panel ─────────────────────────────────────── */}
-      {plateItems.length > 0 && (
-        <div className="fixed bottom-[80px] left-0 right-0 z-20 pointer-events-none pb-4 pt-10 transition-all duration-300">
-          <div className="absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-[#F9F9F9] via-[#F9F9F9] to-transparent opacity-95" />
-          <div className="relative max-w-screen-xl mx-auto px-4 flex flex-col gap-[14px] pointer-events-auto">
-            
-            {/* Total Vitality Card (Transparent when app is scrolled to see map/content) */}
-            <div 
-              className="flex-none shadow-[0_10px_40px_rgba(0,107,95,0.2)] transition-opacity duration-300 rounded-[26px] p-4 flex gap-[14px] overflow-hidden relative"
-              style={{ opacity: isScrolled ? 0.85 : 1, background: "linear-gradient(135deg, rgba(0,68,57,0.95) 0%, rgba(0,121,107,0.95) 50%, rgba(20,184,166,0.92) 100%)", backdropFilter: "blur(12px)" }}
+      <MealPlateCard
+        items={plateItems}
+        isFixedBottom={true}
+        isScrolled={isScrolled}
+        selectedMeal={selectedMeal}
+        onSelectMeal={(slot) => {
+          setSelectedMeal(slot);
+          if (saveMealError) setSaveMealError(null);
+        }}
+        onIncreaseItem={(id) => {
+          handleIncreasePlateItem(id);
+          if (saveMealError) setSaveMealError(null);
+        }}
+        onDecreaseItem={(id) => {
+          handleDecreasePlateItem(id);
+          if (saveMealError) setSaveMealError(null);
+        }}
+        onSaveMeal={handleSaveMeal}
+        isSaving={isSavingMeal}
+        error={saveMealError}
+        extraAction={
+          <button
+            id="ai-ingredient-button-inline"
+            aria-label="AI Ingredient Assistant"
+            onClick={openAiPanel}
+            className="w-[56px] h-[56px] flex-none rounded-[22px] flex items-center justify-center shadow-[0_8px_20px_rgba(0,107,95,0.25)] transition-all active:scale-95 cursor-pointer"
+            style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
+          >
+            <svg
+              className="w-[24px] h-[24px] text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              {/* Left Side: Stats */}
-              <div className="w-[42%] flex flex-col justify-center border-r border-white/20 pr-3 relative">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/60 mb-1 leading-none">Total</p>
-                  <p className="text-[36px] font-extrabold text-white tracking-[-1px] leading-none flex items-baseline gap-[2px]">
-                    {totalKcal}<span className="text-[15px] font-semibold opacity-75">kcal</span>
-                  </p>
-                </div>
-                <div className="flex justify-between mt-4 pr-1">
-                  {[{ label: "P", val: totalProtein }, { label: "C", val: totalCarbs }, { label: "F", val: totalFat }].map(({ label, val }) => (
-                    <div key={label} className="flex flex-col items-start gap-[1px]">
-                      <p className="text-[9px] font-bold text-white/50 leading-none">{label}</p>
-                      <p className="text-[13px] font-extrabold text-white leading-none">
-                        {val}<span className="text-[9px] font-normal opacity-75 ml-[1px]">g</span>
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Right Side: Plate Items (Scrollable) */}
-              <div className="w-[58%] flex flex-col gap-[6px] max-h-[125px] overflow-y-auto no-scrollbar pl-1">
-                {plateItems.map((item, idx) => (
-                  <div key={`${item.id}-${idx}`} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px]" style={{ background: "rgba(255,255,255,0.12)" }}>
-                    <span className="text-[18px] leading-none">{item.emoji}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-bold text-white truncate leading-tight">{item.name}</p>
-                      <p className="text-[10px] text-white/60 truncate mt-[1px] tracking-wide">{item.qty} {item.qty === 1 ? 'srv' : 'srvs'}</p>
-                    </div>
-                    {/* Tiny Stepper */}
-                    <div className="flex items-center gap-1 bg-black/20 rounded-full px-1 py-1">
-                      <button onClick={() => handleDecreasePlateItem(item.id)} className="px-1.5 active:opacity-50">
-                        <svg className="w-[9px] h-[9px] text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" d="M5 12h14" /></svg>
-                      </button>
-                      <span className="text-[11px] font-bold text-white min-w-[12px] text-center leading-none tabular-nums select-none mb-[1px]">{item.qty}</span>
-                      <button onClick={() => handleIncreasePlateItem(item.id)} className="px-1.5 active:opacity-50">
-                        <svg className="w-[9px] h-[9px] text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Save Bar Options */}
-            <div className="flex-none pt-1 shrink-0">
-              <div className="flex gap-2 mb-[14px] overflow-x-auto no-scrollbar">
-                {(["breakfast", "lunch", "dinner", "snack"] as MealSlot[]).map((slot) => (
-                  <button
-                    key={slot}
-                    onClick={() => setSelectedMeal(slot)}
-                    className={`flex-none flex items-center gap-1.5 px-4 py-2.5 rounded-full text-[13px] font-bold transition-all active:scale-95 shadow-sm border ${
-                      selectedMeal === slot
-                        ? "bg-[#006B5F] text-white border-transparent"
-                        : "bg-white text-[#3C4A46] border-gray-200"
-                    }`}
-                  >
-                    <span className="text-[15px]">{MEAL_LABELS[slot].emoji}</span>
-                    {MEAL_LABELS[slot].label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex gap-2 items-center w-full">
-                <button
-                  id="save-meal-button"
-                  onClick={handleSaveMeal}
-                  className="flex-1 py-[16px] rounded-[22px] text-white text-[15px] font-bold tracking-wide shadow-[0_8px_20px_rgba(0,107,95,0.25)] transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
-                  style={{ background: "#006B5F" }}
-                >
-                  <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 13l4 4L19 7" />
-                  </svg>
-                  Save {plateItems.length} {plateItems.length === 1 ? "item" : "items"}
-                </button>
-                <button
-                  id="ai-ingredient-button-inline"
-                  aria-label="AI Ingredient Assistant"
-                  onClick={openAiPanel}
-                  className="w-[56px] h-[56px] flex-none rounded-[22px] flex items-center justify-center shadow-[0_8px_20px_rgba(0,107,95,0.25)] transition-all active:scale-95"
-                  style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
-                >
-                  <svg className="w-[24px] h-[24px] text-white" fill="none" stroke="currentColor"
-                    viewBox="0 0 24 24" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
-                    <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
-                    <path d="M19 15l.4 1.2 1.2.4-1.2.4-.4 1.2-.4-1.2-1.2-.4 1.2-.4z" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            
-          </div>
-        </div>
-      )}
+              <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
+              <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
+              <path d="M19 15l.4 1.2 1.2.4-1.2.4-.4 1.2-.4-1.2-1.2-.4 1.2-.4z" />
+            </svg>
+          </button>
+        }
+      />
 
       {/* ── AI Backdrop ─────────────────────────────────────────────────────────── */}
       {aiOpen && (
