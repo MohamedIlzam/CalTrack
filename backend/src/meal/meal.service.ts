@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MealSlot } from '@prisma/client';
+import { parseLocalDate } from '../common/date.util';
 
 export interface LogFoodDto {
   date: string; // YYYY-MM-DD
@@ -32,10 +33,7 @@ export class MealService {
   constructor(private readonly prisma: PrismaService) {}
 
   private parseLocalDate(dateStr: string): Date {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    // Create Date in local timezone context (UTC normalized to midnight of local date)
-    const date = new Date(Date.UTC(year, month - 1, day));
-    return date;
+    return parseLocalDate(dateStr);
   }
 
   async getDailyLog(userId: string, dateStr: string) {

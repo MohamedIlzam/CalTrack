@@ -174,18 +174,18 @@ export function MealPlateCard({
                     </p>
                     {item.isEstimate && (
                       <span
-                        className="text-[8.5px] uppercase font-bold px-1 py-0.5 rounded bg-amber-400/25 text-amber-200 border border-amber-300/30 flex-none leading-none tracking-tight"
+                        className="text-[8.5px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-400/25 text-amber-200 border border-amber-300/30 flex-none leading-none tracking-tight"
                         title="AI Estimated Nutrition"
                       >
-                        Est
+                        AI Estimate
                       </span>
                     )}
                     {item.isVerified && (
                       <span
-                        className="text-[8.5px] uppercase font-bold px-1 py-0.5 rounded bg-emerald-400/25 text-emerald-200 border border-emerald-300/30 flex-none leading-none tracking-tight"
-                        title="Verified Food"
+                        className="text-[8.5px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-400/25 text-emerald-200 border border-emerald-300/30 flex-none leading-none tracking-tight"
+                        title="In Food Catalog"
                       >
-                        ✓
+                        In Catalog
                       </span>
                     )}
                   </div>

@@ -9,10 +9,11 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { AiService } from './ai.service';
+import { AiService, SyntheticDemoContext } from './ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { resolveDiaryDate } from '../common/date.util';
 
 interface AuthenticatedRequest {
   user: {
@@ -54,7 +55,13 @@ export class AiController {
   }
 
   @Post('chat')
-  async chat(@Req() req: AuthenticatedRequest, @Body('message') message: string) {
+  async chat(
+    @Req() req: AuthenticatedRequest,
+    @Body('message') message: string,
+    @Body('includeDemoContext') includeDemoContext?: boolean,
+    @Body('date') dateStr?: string,
+    @Body('timeZone') timeZone?: string,
+  ) {
     if (!message || typeof message !== 'string' || !message.trim()) {
       throw new BadRequestException('message string parameter is required and cannot be empty');
     }
@@ -67,50 +74,25 @@ export class AiController {
     const userId = req.user.id;
     await this.enforceRateLimit(userId);
 
-    // Fetch authoritative user profile from database
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+    // Timezone consistency: resolve date consistently with Home and Search, avoiding server UTC clock skew
+    const { dateStr: resolvedDate } = resolveDiaryDate(dateStr, timeZone);
 
-    // Privacy baseline: Exclude personal identifying details (name, body weight) from external LLM payloads
-    const userContext = user
+    // Strict Privacy Boundary Enforcement (Gemini Free Tier):
+    // Real user profile metrics, personal targets, and actual diary consumption are strictly excluded
+    // from outgoing LLM payloads in backend code.
+    // If demo context is requested, a static synthetic archetype fixture is provided instead.
+    const demoFixture: SyntheticDemoContext | undefined = includeDemoContext
       ? {
-          goal: user.goal,
-          targetCalories: user.targetCalories ?? 2000,
-          targetProteinG: user.targetProteinG ?? 120,
-          targetCarbsG: user.targetCarbsG ?? 220,
-          targetFatG: user.targetFatG ?? 60,
+          isSyntheticDemo: true,
+          goal: 'General Wellness (Synthetic Demo Archetype)',
+          targetCalories: 2000,
+          targetProteinG: 125,
+          targetCarbsG: 225,
+          targetFatG: 65,
         }
       : undefined;
 
-    // Fetch authoritative today's meal log from database
-    const now = new Date();
-    const todayDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-    const log = await this.prisma.mealLog.findUnique({
-      where: { userId_date: { userId, date: todayDate } },
-      include: { entries: true },
-    });
-
-    const todaySummary =
-      log && log.entries && log.entries.length > 0
-        ? {
-            consumedCalories: Math.round(
-              log.entries.reduce((sum, e) => sum + e.loggedCaloriesKcal, 0),
-            ),
-            consumedProtein: Math.round(
-              log.entries.reduce((sum, e) => sum + e.loggedProteinG, 0),
-            ),
-            consumedCarbs: Math.round(
-              log.entries.reduce((sum, e) => sum + e.loggedCarbohydratesG, 0),
-            ),
-            consumedFat: Math.round(
-              log.entries.reduce((sum, e) => sum + e.loggedFatG, 0),
-            ),
-            mealsCount: log.entries.length,
-          }
-        : undefined;
-
-    return this.aiService.askCoach(trimmed, userContext, todaySummary);
+    return this.aiService.askCoach(trimmed, demoFixture);
   }
 
   @Post('parse-prompt')

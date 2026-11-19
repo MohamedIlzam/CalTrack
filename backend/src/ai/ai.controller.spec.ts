@@ -143,17 +143,27 @@ describe('AiController', () => {
       );
     });
 
-    it('should NOT forward user name or weightKg to AiService (privacy baseline)', async () => {
+    it('should strictly exclude real user profile and diary records from Gemini by default', async () => {
       mockAiService.askCoach.mockResolvedValue({ reply: 'Healthy eating tip' });
 
       await controller.chat(mockUserReq, 'Suggest a healthy dinner');
 
+      expect(mockAiService.askCoach).toHaveBeenCalledWith('Suggest a healthy dinner', undefined);
+      expect(mockPrismaService.user.findUnique).not.toHaveBeenCalled();
+      expect(mockPrismaService.mealLog.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should pass only static synthetic demo fixtures when includeDemoContext is enabled', async () => {
+      mockAiService.askCoach.mockResolvedValue({ reply: 'Healthy eating tip' });
+
+      await controller.chat(mockUserReq, 'Suggest a healthy dinner', true);
+
       expect(mockAiService.askCoach).toHaveBeenCalled();
-      const userContextArg = mockAiService.askCoach.mock.calls[0][1];
-      expect(userContextArg.name).toBeUndefined();
-      expect(userContextArg.weightKg).toBeUndefined();
-      expect(userContextArg.goal).toBe('Weight Loss');
-      expect(userContextArg.targetCalories).toBe(2000);
+      const demoArg = mockAiService.askCoach.mock.calls[0][1];
+      expect(demoArg).toBeDefined();
+      expect(demoArg.isSyntheticDemo).toBe(true);
+      expect(demoArg.goal).toContain('Synthetic Demo Archetype');
+      expect(mockPrismaService.user.findUnique).not.toHaveBeenCalled();
     });
   });
 });

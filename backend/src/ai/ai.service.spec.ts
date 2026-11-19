@@ -204,5 +204,17 @@ describe('AiService', () => {
         service.validateFoodSuggestionOutput(maliciousOutput, maliciousPrompt),
       ).toThrow('out of realistic range (0-5000)');
     });
+
+    it('should support synthetic demo context archetype without real user PII', () => {
+      const demoContext = {
+        isSyntheticDemo: true,
+        goal: 'Sample Archetype',
+        targetCalories: 2000,
+        targetProteinG: 125,
+      };
+
+      expect(demoContext.isSyntheticDemo).toBe(true);
+      expect(demoContext.goal).toBe('Sample Archetype');
+    });
   });
 });

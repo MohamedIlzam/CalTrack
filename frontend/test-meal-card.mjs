@@ -123,8 +123,8 @@ console.log('\nTest 3: Authoritative backend totals override');
   assert(html.includes('>22<') || html.includes('22<span'), 'Authoritative total fat (22g) rendered');
 }
 
-// ── Test 4: Verified vs. Estimate badge rendering ─────────────────────────────
-console.log('\nTest 4: Food origin badges (Verified vs. AI Estimate)');
+// ── Test 4: Catalog vs. Estimate badge rendering ─────────────────────────────
+console.log('\nTest 4: Food origin badges (In Catalog vs. AI Estimate)');
 {
   const items = [
     { id: 'verified-1', name: 'Postgres DB Food', qty: 1, isVerified: true, emoji: '🥗' },
@@ -134,10 +134,10 @@ console.log('\nTest 4: Food origin badges (Verified vs. AI Estimate)');
 
   const html = renderToStaticMarkup(React.createElement(MealPlateCard, { items }));
 
-  assert(html.includes('title="Verified Food"'), 'Renders verified food badge with tooltip');
-  assert(html.includes('>✓<'), 'Renders verified food checkmark indicator');
+  assert(html.includes('title="In Food Catalog"'), 'Renders in catalog food badge with tooltip');
+  assert(html.includes('In Catalog'), 'Renders "In Catalog" indicator');
   assert(html.includes('title="AI Estimated Nutrition"'), 'Renders AI estimate badge with tooltip');
-  assert(html.includes('>Est<'), 'Renders "Est" label for AI estimated food');
+  assert(html.includes('AI Estimate'), 'Renders "AI Estimate" label for AI estimated food');
 }
 
 // ── Test 5: Read-only Preview mode vs. Editable mode ──────────────────────────

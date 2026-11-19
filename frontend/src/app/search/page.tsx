@@ -804,7 +804,7 @@ function SearchContent() {
             isFetching ? (
               <div className="flex flex-col items-center justify-center py-12 gap-3" role="status">
                 <div className="w-8 h-8 border-3 border-[#006B5F]/20 border-t-[#006B5F] rounded-full animate-spin" />
-                <p className="text-[13px] font-semibold text-[#3C4A46]/70">Searching verified database...</p>
+                <p className="text-[13px] font-semibold text-[#3C4A46]/70">Searching food catalog...</p>
               </div>
             ) : isSearchError ? (
               <div className="flex flex-col items-center py-8 px-4 rounded-[20px] bg-red-500/10 border border-red-500/25 text-center gap-3" role="alert">
@@ -834,7 +834,7 @@ function SearchContent() {
                 </div>
                 <div className="text-center">
                   <p className="text-[15px] font-bold text-[#1A1C1C]">
-                    No verified foods found for &ldquo;{searchQuery}&rdquo;
+                    No catalog foods found for &ldquo;{searchQuery}&rdquo;
                   </p>
                   <p className="text-[13px] text-[#3C4A46]/70 mt-1 max-w-[280px]">
                     This dish isn&apos;t in our database yet. You can estimate its nutrition with our AI Assistant!
@@ -888,13 +888,13 @@ function SearchContent() {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="font-extrabold text-[14px] text-[#1A1C1C] leading-tight">{food.name}</h3>
                           {food.isVerified && (
-                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 leading-none" title="Verified Database Food">
-                              ✓ Verified
+                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 leading-none" title="In Food Catalog">
+                              In Catalog
                             </span>
                           )}
                           {food.isEstimate && (
                             <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 leading-none" title="AI Estimated Nutrition">
-                              Est AI
+                              AI Estimate
                             </span>
                           )}
                         </div>

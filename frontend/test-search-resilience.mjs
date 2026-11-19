@@ -29,7 +29,7 @@ console.log('CALTRACK PHASE 01: SEARCH RESILIENCE & ERROR HANDLING SUITE');
 console.log('================================================================\n');
 
 // ── Test 1: Succeeded Search with Database Items ─────────────────────────────
-console.log('Test 1: Succeeded search renders genuine verified database items');
+console.log('Test 1: Succeeded search renders genuine catalog database items');
 {
   const backendFoods = [
     {

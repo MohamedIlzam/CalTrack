@@ -373,9 +373,10 @@ export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
   return res.json();
 }
 
-export async function sendCoachChat(message: string): Promise<{ reply: string }> {
+export async function sendCoachChat(message: string, date?: string): Promise<{ reply: string }> {
   const token = getAuthToken();
   const host = getBackendHost();
+  const timeZone = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Asia/Colombo';
 
   const res = await fetchWithTimeout(`http://${host}:3001/ai/chat`, {
     method: 'POST',
@@ -383,7 +384,7 @@ export async function sendCoachChat(message: string): Promise<{ reply: string }>
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, date, timeZone }),
   }, 15000);
 
   if (!res.ok) {
