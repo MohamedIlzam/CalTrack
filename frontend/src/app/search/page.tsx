@@ -8,6 +8,7 @@ import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore"
 import { postLogMeal, deleteMealEntry, updateMealEntry, type UpdateMealPayload, parseAiPrompt, scanMealImage, fetchWithTimeout } from "@/lib/api";
 import { MealPlateCard } from "@/components/meal/MealPlateCard";
 import { getLocalDateString } from "@/lib/date";
+import { FormattedText } from "@/components/ui/FormattedText";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Food {
@@ -1106,7 +1107,18 @@ function SearchContent() {
                       ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                   }}
                 >
-                  {msg.text}
+                  <FormattedText
+                    text={msg.text}
+                    className="space-y-1.5 text-[13px] leading-snug"
+                    boldClassName={
+                      msg.role === "user"
+                        ? "font-bold text-white underline decoration-white/40"
+                        : msg.role === "error"
+                        ? "font-bold text-rose-800"
+                        : "font-bold text-[#006B5F]"
+                    }
+                    bulletColor={msg.role === "user" ? "bg-white" : "bg-[#006B5F]"}
+                  />
                   {msg.role === "error" && msg.errorDetails?.lastPrompt && (
                     <div className="mt-2 pt-2 border-t border-rose-200">
                       <button

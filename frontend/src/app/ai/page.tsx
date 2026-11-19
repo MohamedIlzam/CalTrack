@@ -4,6 +4,9 @@ import React, { useState, useRef, useEffect } from "react";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { sendCoachChat } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
+import { FormattedText, renderSafeInline } from "@/components/ui/FormattedText";
+
+export { FormattedText, renderSafeInline };
 
 export type Message = {
   id: string;
@@ -24,71 +27,6 @@ const SUGGESTION_CHIPS = [
   "Healthy evening snacks",
   "Post-workout meal advice",
 ];
-
-/* ─────────────── React-Safe Formatted Message Bubble ─────────────── */
-/**
- * Safely parses inline markdown (bold **text**) into React elements.
- * Treats all content as React text nodes, completely eliminating XSS / dangerouslySetInnerHTML risks.
- */
-export function renderSafeInline(str: string): React.ReactNode[] {
-  const parts = str.split(/(\*\*.*?\*\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
-      const boldText = part.slice(2, -2);
-      return (
-        <strong key={i} className="font-bold text-[#006B5F]">
-          {boldText}
-        </strong>
-      );
-    }
-    return <React.Fragment key={i}>{part}</React.Fragment>;
-  });
-}
-
-export function FormattedText({ text }: { text: string }) {
-  const lines = text.split("\n");
-
-  return (
-    <div className="space-y-2 text-[14.5px] leading-relaxed text-[#1A1C1C]">
-      {lines.map((line, idx) => {
-        const trimmed = line.trim();
-        if (!trimmed) return <div key={idx} className="h-1" />;
-
-        // Bullet point
-        if (trimmed.startsWith("* ") || trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
-          const bulletContent = trimmed.replace(/^(\*|-|•)\s+/, "");
-          return (
-            <div key={idx} className="flex items-start gap-2 pl-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#006B5F] mt-2 flex-shrink-0" />
-              <span className="flex-1">{renderSafeInline(bulletContent)}</span>
-            </div>
-          );
-        }
-
-        // Numbered list
-        const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
-        if (numMatch) {
-          const num = numMatch[1];
-          const listContent = numMatch[2];
-          return (
-            <div key={idx} className="flex items-start gap-2 pl-1">
-              <span className="w-5 h-5 rounded-full bg-[#2DD4BF]/20 text-[#006B5F] text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                {num}
-              </span>
-              <span className="flex-1">{renderSafeInline(listContent)}</span>
-            </div>
-          );
-        }
-
-        return (
-          <p key={idx}>
-            {renderSafeInline(trimmed)}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ─────────────── Live Daily Snapshot Card ─────────────── */
 function DailySnapshotCard() {
@@ -170,10 +108,16 @@ export default function AIChatPage() {
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll on updates
+  // Track if user has engaged in conversation (for contextual suggestion chips & clearance)
+  const hasStarted = messages.some((m) => m.role === "user");
+
+  // Auto-scroll to ensure latest message and response are fully in view
   useEffect(() => {
-    if (scrollRef.current) {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    } else if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isThinking]);
@@ -214,7 +158,7 @@ export default function AIChatPage() {
       };
       setMessages((prev) => [...prev, coachMsg]);
     } catch (err: any) {
-      console.error("Coach chat error:", err);
+      console.warn("Coach chat error (handled):", err?.message || err);
       const errMsg = err?.message || "Unable to reach CalTrack AI. Please check your connection or try again.";
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -238,6 +182,7 @@ export default function AIChatPage() {
 
   const handleClearChat = () => {
     setMessages([initialWelcome]);
+    setInput("");
   };
 
   return (
@@ -307,7 +252,9 @@ export default function AIChatPage() {
       {/* ── Scrollable Chat Thread ── */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto pt-[86px] pb-[220px] px-5 space-y-6 max-w-md mx-auto w-full"
+        className={`flex-1 overflow-y-auto pt-[86px] ${
+          hasStarted ? "pb-[160px]" : "pb-[230px]"
+        } px-5 space-y-6 max-w-md mx-auto w-full`}
       >
         {messages.map((msg) => {
           if (msg.role === "user") {
@@ -443,6 +390,9 @@ export default function AIChatPage() {
             </div>
           </div>
         )}
+
+        {/* Scroll anchor to guarantee latest message is fully above composer */}
+        <div ref={messagesEndRef} className="h-2" />
       </div>
 
       <style>{`
@@ -457,19 +407,21 @@ export default function AIChatPage() {
         <div className="absolute inset-0 bg-gradient-to-t from-[#F9F9F9] via-[#F9F9F9]/95 to-transparent pointer-events-none" />
 
         <div className="relative z-10 space-y-3">
-          {/* Prompt Chips — 1-Tap Instant Send */}
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pointer-events-auto">
-            {SUGGESTION_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                onClick={() => handleSendMessage(chip)}
-                disabled={isThinking}
-                className="whitespace-nowrap bg-white border border-[#BACAC5]/30 text-[13px] font-semibold text-[#1A1C1C] px-4 py-2.5 rounded-full shadow-sm hover:bg-[#EEF3F2] active:scale-95 transition-all cursor-pointer"
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
+          {/* Prompt Chips — 1-Tap Instant Send (Available when starting a conversation, hidden once chat begins) */}
+          {!hasStarted && (
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pointer-events-auto">
+              {SUGGESTION_CHIPS.map((chip) => (
+                <button
+                  key={chip}
+                  onClick={() => handleSendMessage(chip)}
+                  disabled={isThinking}
+                  className="whitespace-nowrap bg-white border border-[#BACAC5]/30 text-[13px] font-semibold text-[#1A1C1C] px-4 py-2.5 rounded-full shadow-sm hover:bg-[#EEF3F2] active:scale-95 transition-all cursor-pointer"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Text Input Composer */}
           <div className="relative pointer-events-auto shadow-xl rounded-2xl overflow-hidden border border-[#BACAC5]/30 bg-white">
