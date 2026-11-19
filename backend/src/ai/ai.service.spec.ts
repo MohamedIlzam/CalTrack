@@ -13,6 +13,52 @@ describe('AiService', () => {
     service = module.get<AiService>(AiService);
   });
 
+  describe('isPureGreeting', () => {
+    it('should detect casual greetings and non-food conversational openers', () => {
+      expect(service.isPureGreeting('helloe ther')).toBe(true);
+      expect(service.isPureGreeting('hello there')).toBe(true);
+      expect(service.isPureGreeting('hello')).toBe(true);
+      expect(service.isPureGreeting('hi')).toBe(true);
+      expect(service.isPureGreeting('hey')).toBe(true);
+      expect(service.isPureGreeting('how are you')).toBe(true);
+      expect(service.isPureGreeting('good morning')).toBe(true);
+      expect(service.isPureGreeting('what can you do')).toBe(true);
+      expect(service.isPureGreeting('help')).toBe(true);
+      expect(service.isPureGreeting('test')).toBe(true);
+    });
+
+    it('should NOT flag actual foods or estimation requests as pure greetings', () => {
+      expect(service.isPureGreeting('chicken curry and rice')).toBe(false);
+      expect(service.isPureGreeting('Hi, estimate two egg hoppers')).toBe(false);
+      expect(service.isPureGreeting('hello can you calculate 2 roti')).toBe(false);
+      expect(service.isPureGreeting('egg hopper')).toBe(false);
+      expect(service.isPureGreeting('dhal curry')).toBe(false);
+      expect(service.isPureGreeting('1 cup of tea')).toBe(false);
+    });
+  });
+
+  describe('parsePrompt greeting fast-path (Fix 1)', () => {
+    it('should return friendly guidance without food card and without calling Gemini API for pure greetings', async () => {
+      // Even without GEMINI_API_KEY, pure greeting returns instantly
+      const result = await service.parsePrompt('helloe ther');
+
+      expect(result.text).toBe(
+        'Hi! I can estimate calories and macros for foods. Try describing something like chicken fried rice or dhal curry.',
+      );
+      expect(result.suggestedFood).toBeUndefined();
+    });
+
+    it('should return friendly guidance without food card for other greetings like "hi" or "hello there"', async () => {
+      const res1 = await service.parsePrompt('hi');
+      expect(res1.suggestedFood).toBeUndefined();
+      expect(res1.text).toContain('Try describing something like chicken fried rice');
+
+      const res2 = await service.parsePrompt('hello there');
+      expect(res2.suggestedFood).toBeUndefined();
+      expect(res2.text).toContain('Try describing something like chicken fried rice');
+    });
+  });
+
   describe('validateFoodSuggestionOutput', () => {
     it('should validate and sanitize valid Gemini output', () => {
       const parsed = {
@@ -157,7 +203,7 @@ describe('AiService', () => {
   });
 
   describe('Failure Handling without fake fallbacks', () => {
-    it('should throw ServiceUnavailableException if GEMINI_API_KEY is not configured', async () => {
+    it('should throw ServiceUnavailableException if GEMINI_API_KEY is not configured for non-greetings', async () => {
       const originalKey = process.env.GEMINI_API_KEY;
       delete process.env.GEMINI_API_KEY;
 

@@ -10,6 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AiService, SyntheticDemoContext } from './ai.service';
+import { DiarySummaryService } from './diary-summary.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -28,6 +29,7 @@ interface AuthenticatedRequest {
 export class AiController {
   constructor(
     private readonly aiService: AiService,
+    private readonly diarySummaryService: DiarySummaryService,
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
   ) {}
@@ -73,6 +75,20 @@ export class AiController {
 
     const userId = req.user.id;
     await this.enforceRateLimit(userId);
+
+    // 1. Authoritative Diary Handling:
+    // If user is querying today's intake, macros, logged meals, or past dates,
+    // respond deterministically using authentic PostgreSQL records.
+    // Zero private user diary data is transmitted to Gemini.
+    const diaryAnswer = await this.diarySummaryService.tryHandleCoachDiaryIntent(
+      userId,
+      trimmed,
+      dateStr,
+      timeZone,
+    );
+    if (diaryAnswer) {
+      return diaryAnswer;
+    }
 
     // Timezone consistency: resolve date consistently with Home and Search, avoiding server UTC clock skew
     const { dateStr: resolvedDate } = resolveDiaryDate(dateStr, timeZone);

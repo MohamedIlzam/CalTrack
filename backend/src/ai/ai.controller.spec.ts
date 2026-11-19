@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, HttpException, HttpStatus, ServiceUnavailableException } from '@nestjs/common';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { DiarySummaryService } from './diary-summary.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
 describe('AiController', () => {
   let controller: AiController;
   let mockAiService: any;
+  let mockDiarySummaryService: any;
   let mockPrismaService: any;
   let mockRedisService: any;
 
@@ -24,6 +26,10 @@ describe('AiController', () => {
       askCoach: jest.fn(),
       parsePrompt: jest.fn(),
       scanImage: jest.fn(),
+    };
+
+    mockDiarySummaryService = {
+      tryHandleCoachDiaryIntent: jest.fn().mockResolvedValue(null),
     };
 
     mockPrismaService = {
@@ -56,6 +62,7 @@ describe('AiController', () => {
       controllers: [AiController],
       providers: [
         { provide: AiService, useValue: mockAiService },
+        { provide: DiarySummaryService, useValue: mockDiarySummaryService },
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: RedisService, useValue: mockRedisService },
       ],
@@ -142,8 +149,39 @@ describe('AiController', () => {
         BadRequestException,
       );
     });
+  });
+
+  describe('Coach Diary Intent Routing (Fix 2)', () => {
+    it('should intercept today diary questions locally without calling Gemini Coach', async () => {
+      mockDiarySummaryService.tryHandleCoachDiaryIntent.mockResolvedValue({
+        reply: "Here is what you've logged today (**2026-11-20**):\n* **Calories:** 500 kcal",
+      });
+
+      const res = await controller.chat(mockUserReq, 'What did I have today?');
+
+      expect(mockDiarySummaryService.tryHandleCoachDiaryIntent).toHaveBeenCalledWith(
+        'test-user-id',
+        'What did I have today?',
+        undefined,
+        undefined,
+      );
+      expect(mockAiService.askCoach).not.toHaveBeenCalled();
+      expect(res.reply).toContain("Here is what you've logged today");
+    });
+
+    it('should route general nutrition questions to Gemini Coach when diary intent returns null', async () => {
+      mockDiarySummaryService.tryHandleCoachDiaryIntent.mockResolvedValue(null);
+      mockAiService.askCoach.mockResolvedValue({ reply: 'Healthy eating tip' });
+
+      const res = await controller.chat(mockUserReq, 'Suggest a healthy dinner');
+
+      expect(mockDiarySummaryService.tryHandleCoachDiaryIntent).toHaveBeenCalled();
+      expect(mockAiService.askCoach).toHaveBeenCalledWith('Suggest a healthy dinner', undefined);
+      expect(res.reply).toBe('Healthy eating tip');
+    });
 
     it('should strictly exclude real user profile and diary records from Gemini by default', async () => {
+      mockDiarySummaryService.tryHandleCoachDiaryIntent.mockResolvedValue(null);
       mockAiService.askCoach.mockResolvedValue({ reply: 'Healthy eating tip' });
 
       await controller.chat(mockUserReq, 'Suggest a healthy dinner');
@@ -154,6 +192,7 @@ describe('AiController', () => {
     });
 
     it('should pass only static synthetic demo fixtures when includeDemoContext is enabled', async () => {
+      mockDiarySummaryService.tryHandleCoachDiaryIntent.mockResolvedValue(null);
       mockAiService.askCoach.mockResolvedValue({ reply: 'Healthy eating tip' });
 
       await controller.chat(mockUserReq, 'Suggest a healthy dinner', true);
