@@ -31,6 +31,38 @@ export function getAuthToken(): string | null {
   return null;
 }
 
+const DEFAULT_TIMEOUT_MS = 10000; // 10 seconds
+
+export async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new Error(`Request timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+
+  if (options.signal) {
+    options.signal.addEventListener('abort', () => controller.abort());
+  }
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return res;
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || controller.signal.aborted) {
+      throw new Error(`Connection timed out after ${Math.round(timeoutMs / 1000)}s. Please check your network connection.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface ApiMealLogEntry {
   id: string;
   mealLogId: string;
@@ -63,9 +95,9 @@ export async function fetchDailyLog(dateStr: string): Promise<ApiMealLog | null>
   if (!token) return null;
   
   const host = getBackendHost();
-  const res = await fetch(`http://${host}:3001/meal/daily?date=${dateStr}`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/meal/daily?date=${dateStr}`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, 10000);
 
   if (!res.ok) {
     if (res.status === 401) return null;
@@ -104,14 +136,14 @@ export async function postLogMeal(payload: LogMealPayload): Promise<ApiMealLogEn
   const token = getAuthToken();
   const host = getBackendHost();
 
-  const res = await fetch(`http://${host}:3001/meal/log`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/meal/log`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-  });
+  }, 10000);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
@@ -134,14 +166,14 @@ export async function updateMealEntry(id: string, payload: UpdateMealPayload): P
   const token = getAuthToken();
   const host = getBackendHost();
 
-  const res = await fetch(`http://${host}:3001/meal/entry/${id}`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/meal/entry/${id}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-  });
+  }, 10000);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
@@ -164,12 +196,12 @@ export async function deleteMealEntry(id: string): Promise<void> {
   const token = getAuthToken();
   const host = getBackendHost();
 
-  const res = await fetch(`http://${host}:3001/meal/entry/${id}`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/meal/entry/${id}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`,
     },
-  });
+  }, 10000);
 
   if (!res.ok) {
     throw new Error('Failed to delete meal entry');
@@ -197,9 +229,9 @@ export async function fetchWeightHistory(): Promise<WeightEntry[]> {
   if (!token) return [];
 
   const host = getBackendHost();
-  const res = await fetch(`http://${host}:3001/progress/weight`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/progress/weight`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, 10000);
 
   if (!res.ok) {
     if (res.status === 401) return [];
@@ -213,14 +245,14 @@ export async function postWeightLog(weightKg: number): Promise<WeightEntry> {
   const token = getAuthToken();
   const host = getBackendHost();
 
-  const res = await fetch(`http://${host}:3001/progress/weight`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/progress/weight`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ weightKg }),
-  });
+  }, 10000);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
@@ -235,9 +267,9 @@ export async function fetchAdherence(days: number = 7): Promise<AdherenceDay[]> 
   if (!token) return [];
 
   const host = getBackendHost();
-  const res = await fetch(`http://${host}:3001/progress/adherence?days=${days}`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/progress/adherence?days=${days}`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, 10000);
 
   if (!res.ok) {
     if (res.status === 401) return [];
@@ -268,9 +300,9 @@ export async function fetchUserProfile(): Promise<UserProfile | null> {
   if (!token) return null;
 
   const host = getBackendHost();
-  const res = await fetch(`http://${host}:3001/auth/profile`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/auth/profile`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, 10000);
 
   if (!res.ok) {
     if (res.status === 401) return null;
@@ -284,14 +316,14 @@ export async function updateUserProfile(payload: Partial<UserProfile>): Promise<
   const token = getAuthToken();
   const host = getBackendHost();
 
-  const res = await fetch(`http://${host}:3001/auth/profile`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/auth/profile`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-  });
+  }, 10000);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
@@ -324,14 +356,14 @@ export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
   const token = getAuthToken();
   const host = getBackendHost();
 
-  const res = await fetch(`http://${host}:3001/ai/parse-prompt`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/ai/parse-prompt`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ prompt }),
-  });
+  }, 15000);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
@@ -345,14 +377,14 @@ export async function sendCoachChat(message: string): Promise<{ reply: string }>
   const token = getAuthToken();
   const host = getBackendHost();
 
-  const res = await fetch(`http://${host}:3001/ai/chat`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/ai/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ message }),
-  });
+  }, 15000);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
@@ -366,14 +398,14 @@ export async function scanMealImage(imageBase64: string): Promise<AiParseRespons
   const token = getAuthToken();
   const host = getBackendHost();
 
-  const res = await fetch(`http://${host}:3001/ai/scan-image`, {
+  const res = await fetchWithTimeout(`http://${host}:3001/ai/scan-image`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ imageBase64 }),
-  });
+  }, 25000);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));

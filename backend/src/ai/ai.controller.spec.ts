@@ -142,5 +142,18 @@ describe('AiController', () => {
         BadRequestException,
       );
     });
+
+    it('should NOT forward user name or weightKg to AiService (privacy baseline)', async () => {
+      mockAiService.askCoach.mockResolvedValue({ reply: 'Healthy eating tip' });
+
+      await controller.chat(mockUserReq, 'Suggest a healthy dinner');
+
+      expect(mockAiService.askCoach).toHaveBeenCalled();
+      const userContextArg = mockAiService.askCoach.mock.calls[0][1];
+      expect(userContextArg.name).toBeUndefined();
+      expect(userContextArg.weightKg).toBeUndefined();
+      expect(userContextArg.goal).toBe('Weight Loss');
+      expect(userContextArg.targetCalories).toBe(2000);
+    });
   });
 });

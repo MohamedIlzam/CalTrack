@@ -72,15 +72,14 @@ export class AiController {
       where: { id: userId },
     });
 
+    // Privacy baseline: Exclude personal identifying details (name, body weight) from external LLM payloads
     const userContext = user
       ? {
-          name: user.name,
           goal: user.goal,
           targetCalories: user.targetCalories ?? 2000,
           targetProteinG: user.targetProteinG ?? 120,
           targetCarbsG: user.targetCarbsG ?? 220,
           targetFatG: user.targetFatG ?? 60,
-          weightKg: user.weightKg ?? undefined,
         }
       : undefined;
 

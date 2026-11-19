@@ -15,6 +15,7 @@ import {
   type SubIngredient,
 } from "@/store/useAppStore";
 import { fetchDailyLog, deleteMealEntry, getAuthToken } from "@/lib/api";
+import { getLocalDateString } from "@/lib/date";
 
 /* ─── Helpers ─── */
 
@@ -440,7 +441,7 @@ export default function HomePage() {
   const removeFoodEntry = useAppStore((s) => s.removeFoodEntry);
 
   const queryClient = useQueryClient();
-  const dateIso = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const dateIso = useMemo(() => getLocalDateString(), []);
 
   const { data: dailyLog } = useQuery({
     queryKey: ['dailyLog', dateIso],

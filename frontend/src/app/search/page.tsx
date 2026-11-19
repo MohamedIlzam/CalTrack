@@ -5,8 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore";
-import { postLogMeal, deleteMealEntry, updateMealEntry, type UpdateMealPayload, parseAiPrompt, scanMealImage } from "@/lib/api";
+import { postLogMeal, deleteMealEntry, updateMealEntry, type UpdateMealPayload, parseAiPrompt, scanMealImage, fetchWithTimeout } from "@/lib/api";
 import { MealPlateCard } from "@/components/meal/MealPlateCard";
+import { getLocalDateString } from "@/lib/date";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Food {
@@ -21,6 +22,7 @@ interface Food {
   category: string;
   portionDescription?: string;
   isEstimate?: boolean;
+  isVerified?: boolean;
 }
 
 interface PlateItem extends Food {
@@ -78,10 +80,10 @@ const fetchFoods = async (q: string): Promise<Food[]> => {
   if (!q.trim()) return [];
   const token = localStorage.getItem("token");
   const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
-  const res = await fetch(`http://${hostname}:3001/food/search?q=${encodeURIComponent(q)}`, {
+  const res = await fetchWithTimeout(`http://${hostname}:3001/food/search?q=${encodeURIComponent(q)}`, {
     headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) throw new Error("Failed to fetch foods");
+  }, 8000);
+  if (!res.ok) throw new Error("Failed to fetch foods from database");
   const data = await res.json();
   
   return data.map((d: any) => {
@@ -92,6 +94,7 @@ const fetchFoods = async (q: string): Promise<Food[]> => {
     else if (d.category === "Sides") { emoji = "🥗"; chipColor = "#2C7A45"; }
     else if (d.category === "Extras") { emoji = "🥚"; chipColor = "#F4D03F"; }
     
+    const unitName = d.unitConversions?.[0]?.unitName;
     const servingMultiplier = (d.unitConversions?.[0]?.gramEquivalent || 100) / 100;
 
     return {
@@ -104,6 +107,8 @@ const fetchFoods = async (q: string): Promise<Food[]> => {
       emoji,
       chipColor,
       category: d.category,
+      portionDescription: unitName ? `1 ${unitName}` : undefined,
+      isVerified: d.isVerified !== undefined ? d.isVerified : true,
     };
   });
 };
@@ -209,10 +214,17 @@ function SearchContent() {
   const initializedMealRef = useRef<string | null>(null);
 
   // ── React Query ──────────────────────────────────────────────────────────────
-  const { data: searchedFoods = [], isFetching } = useQuery({
+  const {
+    data: searchedFoods = [],
+    isFetching,
+    isError: isSearchError,
+    error: searchError,
+    refetch: refetchSearch,
+  } = useQuery({
     queryKey: ['foods', searchQuery],
     queryFn: () => fetchFoods(searchQuery),
     enabled: !!searchQuery.trim(),
+    retry: 1,
   });
 
   const entries = useAppStore((s) => s.entries);
@@ -312,23 +324,21 @@ function SearchContent() {
   }, [aiMessages, aiThinking]);
 
   // ── Search / filter ──────────────────────────────────────────────────────────
+  const isSearching = !!searchQuery.trim();
   const normalizedQuery = searchQuery.toLowerCase().trim();
-  const isDefaultEmpty = !searchQuery.trim() && activeCategory === "All";
 
-  const localMatchingFoods = FOOD_DB.filter((f) => {
-    const matchesCategory = activeCategory === "All" || f.category === activeCategory;
-    const matchesQuery = !normalizedQuery || f.name.toLowerCase().includes(normalizedQuery);
-    return matchesCategory && matchesQuery;
-  });
+  // Preset catalog for initial browsing when no query is typed
+  const presetCatalogFoods = useMemo(() => {
+    if (activeCategory === "All") return FOOD_DB;
+    return FOOD_DB.filter((f) => f.category === activeCategory);
+  }, [activeCategory]);
 
-  // Combine backend results (if available) with local database fallback
-  const displayedFoods = useMemo(() => {
-    if (searchedFoods.length > 0) {
-      if (activeCategory === "All") return searchedFoods;
-      return searchedFoods.filter((f) => f.category === activeCategory);
-    }
-    return localMatchingFoods;
-  }, [searchedFoods, localMatchingFoods, activeCategory]);
+  // Verified database search results (when searching)
+  const filteredSearchedFoods = useMemo(() => {
+    if (!isSearching) return [];
+    if (activeCategory === "All") return searchedFoods;
+    return searchedFoods.filter((f) => f.category === activeCategory);
+  }, [isSearching, searchedFoods, activeCategory]);
 
   // ── Plate helpers ────────────────────────────────────────────────────────────
   const getPlateQty = (id: string) => plateItems.find((i) => i.id === id)?.qty ?? 0;
@@ -375,7 +385,7 @@ function SearchContent() {
     if (plateItems.length === 0) return;
     setIsSavingMeal(true);
     setSaveMealError(null);
-    const dateStr = new Date().toISOString().split("T")[0];
+    const dateStr = getLocalDateString();
 
     // Map UI meal slot to backend enum
     let apiMeal: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACKS' = 'BREAKFAST';
@@ -775,23 +785,137 @@ function SearchContent() {
         <section>
           <div className="flex justify-between items-end mb-4">
             <h2 className="text-[18px] font-extrabold text-[#1A1C1C] tracking-tight">
-              {searchQuery.trim()
+              {isSearching
                 ? `Results for "${searchQuery}"`
                 : activeCategory === "All"
-                  ? "All Foods"
+                  ? "Popular Foods"
                   : activeCategory}
             </h2>
             <div className="flex items-center gap-1 text-[11px] text-[#3C4A46]/70 font-bold uppercase tracking-wider">
               <svg className="w-3.5 h-3.5 text-[#006B5F]" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              {displayedFoods.length} items
+              {isSearching ? filteredSearchedFoods.length : presetCatalogFoods.length} items
             </div>
           </div>
 
-          {displayedFoods.length > 0 ? (
+          {/* ── Searching State: Loading / Error / Empty / Results ── */}
+          {isSearching ? (
+            isFetching ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3" role="status">
+                <div className="w-8 h-8 border-3 border-[#006B5F]/20 border-t-[#006B5F] rounded-full animate-spin" />
+                <p className="text-[13px] font-semibold text-[#3C4A46]/70">Searching verified database...</p>
+              </div>
+            ) : isSearchError ? (
+              <div className="flex flex-col items-center py-8 px-4 rounded-[20px] bg-red-500/10 border border-red-500/25 text-center gap-3" role="alert">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[14px] font-bold text-red-800">Food database unavailable</p>
+                  <p className="text-[12px] text-red-600 mt-1 max-w-[280px]">
+                    {searchError instanceof Error ? searchError.message : "Unable to reach the search service. Please check your backend connection."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refetchSearch()}
+                  className="px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white text-[12px] font-bold active:scale-95 transition-all cursor-pointer"
+                >
+                  Retry Search
+                </button>
+              </div>
+            ) : searchedFoods.length === 0 ? (
+              <div className="flex flex-col items-center py-10 gap-4 mt-2">
+                <div className="w-16 h-16 rounded-full bg-[#006B5F]/10 flex items-center justify-center">
+                  <span className="text-[32px]">🍽️</span>
+                </div>
+                <div className="text-center">
+                  <p className="text-[15px] font-bold text-[#1A1C1C]">
+                    No verified foods found for &ldquo;{searchQuery}&rdquo;
+                  </p>
+                  <p className="text-[13px] text-[#3C4A46]/70 mt-1 max-w-[280px]">
+                    This dish isn&apos;t in our database yet. You can estimate its nutrition with our AI Assistant!
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAiInput(searchQuery);
+                    openAiPanel();
+                  }}
+                  className="flex items-center gap-2 px-6 py-3 rounded-full text-white text-[14px] font-bold shadow-lg active:scale-95 transition-all cursor-pointer"
+                  style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
+                    <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
+                  </svg>
+                  Estimate &ldquo;{searchQuery}&rdquo; with AI
+                </button>
+              </div>
+            ) : filteredSearchedFoods.length === 0 ? (
+              <div className="flex flex-col items-center py-10 gap-3 text-center">
+                <p className="text-[14px] font-semibold text-[#1A1C1C]">
+                  No &ldquo;{searchQuery}&rdquo; found in {activeCategory}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("All")}
+                  className="text-[13px] font-bold text-[#006B5F] underline"
+                >
+                  Show in All categories ({searchedFoods.length} matches)
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {filteredSearchedFoods.map((food) => (
+                  <div
+                    key={food.id}
+                    className="flex items-center justify-between p-3 bg-white rounded-[20px] shadow-sm border border-[#BACAC5]/15 group active:scale-[0.99] transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-[48px] h-[48px] rounded-[14px] flex-shrink-0 flex items-center justify-center text-[22px] select-none"
+                        style={{ background: food.chipColor + "1E" }}
+                      >
+                        {food.emoji}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-extrabold text-[14px] text-[#1A1C1C] leading-tight">{food.name}</h3>
+                          {food.isVerified && (
+                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 leading-none" title="Verified Database Food">
+                              ✓ Verified
+                            </span>
+                          )}
+                          {food.isEstimate && (
+                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 leading-none" title="AI Estimated Nutrition">
+                              Est AI
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[12px] text-[#3C4A46] mt-[2px]">
+                          {food.kcalPerServing}&nbsp;<span className="text-[#BACAC5]">kcal / {food.portionDescription || 'serving'}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <Stepper
+                      qty={getPlateQty(food.id)}
+                      onIncrease={() => handleIncrease(food)}
+                      onDecrease={() => handleDecrease(food)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            /* ── Default Catalog Browsing State (Preset Foods) ── */
             <div className="flex flex-col gap-3">
-              {displayedFoods.map((food) => (
+              {presetCatalogFoods.map((food) => (
                 <div
                   key={food.id}
                   className="flex items-center justify-between p-3 bg-white rounded-[20px] shadow-sm border border-[#BACAC5]/15 group active:scale-[0.99] transition-all"
@@ -818,62 +942,8 @@ function SearchContent() {
                 </div>
               ))}
             </div>
-          ) : (
-            /* ── Empty State + AI CTA ─────────────────────────────────────────── */
-            isDefaultEmpty ? (
-              <div className="flex flex-col items-center py-10 gap-4 mt-8">
-                <div className="w-16 h-16 rounded-full bg-[#006B5F]/10 flex items-center justify-center">
-                  <span className="text-[32px]">🥗</span>
-                </div>
-                <div className="text-center">
-                  <p className="text-[16px] font-extrabold text-[#1A1C1C]">
-                    What are you having?
-                  </p>
-                  <p className="text-[13px] text-[#3C4A46]/70 mt-1 max-w-[260px]">
-                    Search for a food, pick a category, or create a custom entry with AI!
-                  </p>
-                </div>
-                <button
-                  onClick={openAiPanel}
-                  className="mt-2 flex items-center gap-2 px-6 py-3 rounded-full text-white text-[14px] font-bold shadow-lg active:scale-95 transition-all"
-                  style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
-                    <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
-                  </svg>
-                  Create with AI
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center py-10 gap-4 mt-4">
-                <div className="w-16 h-16 rounded-full bg-[#006B5F]/10 flex items-center justify-center">
-                  <span className="text-[32px]">🍽️</span>
-                </div>
-                <div className="text-center">
-                  <p className="text-[15px] font-bold text-[#1A1C1C]">
-                    No foods found for &ldquo;{searchQuery}&rdquo;
-                  </p>
-                  <p className="text-[13px] text-[#3C4A46]/70 mt-1">
-                    Can&apos;t find it? Create your own with AI!
-                  </p>
-                </div>
-                <button
-                  onClick={openAiPanel}
-                  className="flex items-center gap-2 px-6 py-3 rounded-full text-white text-[14px] font-bold shadow-lg active:scale-95 transition-all"
-                  style={{ background: "linear-gradient(135deg, #001E1B 0%, #006B5F 100%)" }}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
-                    <path d="M5 3l.5 1.5L7 5l-1.5.5L5 7l-.5-1.5L3 5l1.5-.5z" />
-                  </svg>
-                  Create with AI
-                </button>
-              </div>
-            )
           )}
+
         </section>
 
         {/* ── Plate Section ─────────────────────────────────────────────────────── */}
