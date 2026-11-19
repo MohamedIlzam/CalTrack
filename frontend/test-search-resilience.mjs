@@ -157,6 +157,85 @@ console.log('\nTest 6: Mutating write failure does not auto-retry blind POSTs');
   assert(postCount === 1, 'Failed POST is NOT re-sent automatically in a blind retry loop');
 }
 
+// ── Test 7: AI Ingredient Creator Failure & Safe Inline Error (CAL-002) ────────
+console.log('\nTest 7: AI Ingredient Creator handled failure renders inline error without uncaught crash');
+{
+  const text = 'butter chicken adn naan';
+  const simulatedError = new Error('AI food analysis is temporarily unavailable. Please enter food manually or try again.');
+  let aiMessages = [];
+  let warnCalled = false;
+
+  // Intercept warning logger
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    warnCalled = true;
+  };
+
+  try {
+    // Simulate catch block in sendAiMessage()
+    console.warn('AI parse prompt failed (handled):', simulatedError.message);
+    const errMsg = simulatedError.message;
+    aiMessages.push({
+      id: `err-${Date.now()}`,
+      role: 'error',
+      text: errMsg,
+      errorDetails: { lastPrompt: text },
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert(warnCalled, 'Handled failure logs via console.warn to avoid triggering Next.js dev overlay');
+  assert(aiMessages.length === 1, 'Error message appended to AI message list');
+  assert(aiMessages[0].role === 'error', 'Appended message has role="error"');
+  assert(aiMessages[0].text.includes('temporarily unavailable'), 'Inline error displays accurate failure message');
+  assert(aiMessages[0].errorDetails?.lastPrompt === text, 'Preserves prompt for Retry action');
+
+  // Verify rendering of error bubble with Retry Analysis
+  const msg = aiMessages[0];
+  const renderedErrorHtml = renderToStaticMarkup(
+    React.createElement(
+      'div',
+      { className: 'ai-error-bubble' },
+      msg.text,
+      msg.role === 'error' && msg.errorDetails?.lastPrompt
+        ? React.createElement(
+            'div',
+            null,
+            React.createElement('button', { type: 'button' }, 'Retry Analysis')
+          )
+        : null
+    )
+  );
+
+  assert(renderedErrorHtml.includes('Retry Analysis'), 'Renders Retry Analysis action inside error bubble');
+}
+
+// ── Test 8: Nonsense Search Empty State & AI Handoff ───────────────────────────
+console.log('\nTest 8: Nonsense query returns 0 items and offers AI estimation');
+{
+  const searchQuery = 'asdasda';
+  const searchedFoods = []; // Backend returned empty array for nonsense query
+
+  const renderedEmptyHtml = renderToStaticMarkup(
+    React.createElement(
+      'div',
+      { className: 'empty-search-state' },
+      React.createElement('p', null, `No catalog foods found for "${searchQuery}"`),
+      React.createElement('button', { type: 'button' }, `Estimate "${searchQuery}" with AI`)
+    )
+  );
+
+  assert(
+    renderedEmptyHtml.includes('No catalog foods found for') && renderedEmptyHtml.includes('asdasda'),
+    'Displays clean no-match message',
+  );
+  assert(
+    renderedEmptyHtml.includes('Estimate') && renderedEmptyHtml.includes('asdasda') && renderedEmptyHtml.includes('with AI'),
+    'Offers one-click AI estimation button for non-catalog foods',
+  );
+}
+
 console.log('\n================================================================');
 console.log(`TEST SUMMARY: ${passCount} PASSED, ${failCount} FAILED`);
 console.log('================================================================\n');

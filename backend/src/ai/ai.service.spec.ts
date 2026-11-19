@@ -205,6 +205,39 @@ describe('AiService', () => {
       ).toThrow('out of realistic range (0-5000)');
     });
 
+    it('should correctly classify transient Gemini errors for retry', () => {
+      const isTransient = (service as any).isTransientGeminiError.bind(service);
+      expect(isTransient({ status: 503, message: 'Service Unavailable' })).toBe(true);
+      expect(isTransient({ code: 503, message: 'Unavailable' })).toBe(true);
+      expect(isTransient({ message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary.' })).toBe(true);
+      expect(isTransient({ status: 429, message: 'Resource exhausted' })).toBe(true);
+      expect(isTransient({ message: '429 Too Many Requests' })).toBe(true);
+
+      expect(isTransient({ status: 400, message: 'Bad Request' })).toBe(false);
+      expect(isTransient({ message: 'Invalid API key' })).toBe(false);
+    });
+
+    it('should produce structured food suggestion result for valid output', () => {
+      const validParsed = {
+        name: 'Butter Chicken and Naan',
+        kcalPerServing: 650,
+        proteinPerServing: 32,
+        carbsPerServing: 62,
+        fatPerServing: 30,
+        category: 'Curries',
+        emoji: '🍛',
+        portionDescription: '1 bowl with 1 naan',
+      };
+
+      const validated = service.validateFoodSuggestionOutput(validParsed, 'butter chicken and naan');
+      expect(validated.name).toBe('Butter Chicken and Naan');
+      expect(validated.kcalPerServing).toBe(650);
+      expect(validated.proteinPerServing).toBe(32);
+      expect(validated.carbsPerServing).toBe(62);
+      expect(validated.fatPerServing).toBe(30);
+      expect(validated.isEstimate).toBe(true);
+    });
+
     it('should support synthetic demo context archetype without real user PII', () => {
       const demoContext = {
         isSyntheticDemo: true,

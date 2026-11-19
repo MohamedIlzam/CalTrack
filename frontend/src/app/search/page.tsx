@@ -469,7 +469,7 @@ function SearchContent() {
       try {
         await updateMealEntry(editEntryId, patchPayload);
       } catch (err: any) {
-        console.error("Failed to update meal log on backend:", err);
+        console.warn("Failed to update meal log on backend (handled):", err?.message || err);
         // Rollback optimistic update if PostgreSQL persistence failed
         if (originalEntry) {
           useAppStore.getState().updateFoodEntry(editEntryId, originalEntry);
@@ -568,7 +568,7 @@ function SearchContent() {
         }));
       }
     } catch (err: any) {
-      console.error("Failed to persist meal log to backend:", err);
+      console.warn("Failed to persist meal log to backend (handled):", err?.message || err);
       // Revert optimistic add if PostgreSQL persistence failed
       useAppStore.getState().removeFoodEntry(tempId);
       const errorMsg = err?.message || "Failed to log food entry. Please check your connection and try again.";
@@ -616,7 +616,7 @@ function SearchContent() {
         },
       ]);
     } catch (err: any) {
-      console.error("AI parse prompt failed:", err);
+      console.warn("AI parse prompt failed (handled):", err?.message || err);
       const errMsg = err?.message || "Failed to analyze meal description. Please try again.";
       setAiMessages((prev) => [
         ...prev,
@@ -660,7 +660,7 @@ function SearchContent() {
             },
           ]);
         } catch (err: any) {
-          console.error("AI photo scan failed:", err);
+          console.warn("AI photo scan failed (handled):", err?.message || err);
           const errMsg = err?.message || "Could not scan meal photo. Please try uploading again.";
           setAiMessages((prev) => [
             ...prev,
