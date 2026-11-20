@@ -8,9 +8,11 @@ import {
   Req,
   HttpException,
   HttpStatus,
+  Optional,
 } from '@nestjs/common';
 import { AiService, SyntheticDemoContext } from './ai.service';
 import { DiarySummaryService } from './diary-summary.service';
+import { CieCoachService } from './intelligence/cie-coach.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -32,6 +34,7 @@ export class AiController {
     private readonly diarySummaryService: DiarySummaryService,
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
+    @Optional() private readonly cieCoachService?: CieCoachService,
   ) {}
 
   private async enforceRateLimit(userId: string): Promise<void> {
@@ -76,18 +79,35 @@ export class AiController {
     const userId = req.user.id;
     await this.enforceRateLimit(userId);
 
-    // 1. Authoritative Diary Handling:
-    // If user is querying today's intake, macros, logged meals, or past dates,
-    // respond deterministically using authentic PostgreSQL records.
-    // Zero private user diary data is transmitted to Gemini.
-    const diaryAnswer = await this.diarySummaryService.tryHandleCoachDiaryIntent(
-      userId,
-      trimmed,
-      dateStr,
-      timeZone,
-    );
-    if (diaryAnswer) {
-      return diaryAnswer;
+    // Feature Flag & CIE Routing:
+    // When CIE_ENABLED=true, route message through CalTrack Intelligence Engine.
+    // If handled, return authoritative response without transmitting user diary data to external LLMs.
+    // When CIE_ENABLED=false (default), preserve existing regex diary intent handling.
+    const isCieEnabled = process.env.CIE_ENABLED === 'true';
+    if (isCieEnabled && this.cieCoachService) {
+      const cieAnswer = await this.cieCoachService.handleCoachMessage(
+        userId,
+        trimmed,
+        dateStr,
+        timeZone,
+      );
+      if (cieAnswer) {
+        return cieAnswer;
+      }
+    } else {
+      // Authoritative Legacy Diary Handling:
+      // If user is querying today's intake, macros, logged meals, or past dates,
+      // respond deterministically using authentic PostgreSQL records.
+      // Zero private user diary data is transmitted to Gemini.
+      const diaryAnswer = await this.diarySummaryService.tryHandleCoachDiaryIntent(
+        userId,
+        trimmed,
+        dateStr,
+        timeZone,
+      );
+      if (diaryAnswer) {
+        return diaryAnswer;
+      }
     }
 
     // Timezone consistency: resolve date consistently with Home and Search, avoiding server UTC clock skew
