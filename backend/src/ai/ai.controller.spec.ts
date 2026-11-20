@@ -169,6 +169,58 @@ describe('AiController', () => {
       expect(res.reply).toContain("Here is what you've logged today");
     });
 
+    it('should intercept "How much food have I ate today?", "How many calories did I eat today?", and "How much protein did I eat today?" locally without calling Gemini', async () => {
+      const realDiaryService = new DiarySummaryService(mockPrismaService);
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        name: 'Test User',
+        targetCalories: 2000,
+        targetProteinG: 140,
+        targetCarbsG: 200,
+        targetFatG: 60,
+      });
+      mockPrismaService.mealLog.findUnique.mockResolvedValue({
+        id: 'log-1',
+        userId: 'test-user-id',
+        entries: [
+          {
+            meal: 'BREAKFAST',
+            food: { name: 'Egg Hopper' },
+            unitName: 'piece',
+            servingQuantity: 2,
+            loggedCaloriesKcal: 320,
+            loggedProteinG: 16,
+            loggedCarbohydratesG: 42,
+            loggedFatG: 14,
+          },
+        ],
+      });
+
+      const testController = new AiController(
+        mockAiService,
+        realDiaryService,
+        mockPrismaService,
+        mockRedisService,
+      );
+
+      const questions = [
+        'How much food have I ate today?',
+        'How many calories did I eat today?',
+        'How much protein did I eat today?',
+      ];
+
+      for (const question of questions) {
+        mockAiService.askCoach.mockClear();
+
+        const res = await testController.chat(mockUserReq, question);
+
+        expect(mockAiService.askCoach).not.toHaveBeenCalled();
+        expect(res).toBeDefined();
+        expect(res.reply).toContain("Here is what you've logged today");
+        expect(res.reply).toContain('Egg Hopper');
+      }
+    });
+
     it('should route general nutrition questions to Gemini Coach when diary intent returns null', async () => {
       mockDiarySummaryService.tryHandleCoachDiaryIntent.mockResolvedValue(null);
       mockAiService.askCoach.mockResolvedValue({ reply: 'Healthy eating tip' });

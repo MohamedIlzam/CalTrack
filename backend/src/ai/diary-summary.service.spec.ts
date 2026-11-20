@@ -39,6 +39,9 @@ describe('DiarySummaryService', () => {
 
     it('should identify intake, calories, and macros queries', () => {
       expect(service.isTodayDiaryQuery('How much food have I eaten today?')).toBe(true);
+      expect(service.isTodayDiaryQuery('How much food have I ate today?')).toBe(true);
+      expect(service.isTodayDiaryQuery('How many calories did I eat today?')).toBe(true);
+      expect(service.isTodayDiaryQuery('How much protein did I eat today?')).toBe(true);
       expect(service.isTodayDiaryQuery('What is my total intake?')).toBe(true);
       expect(service.isTodayDiaryQuery('What is my total intake today?')).toBe(true);
       expect(service.isTodayDiaryQuery('How many calories and macros have I consumed today?')).toBe(true);
@@ -244,6 +247,19 @@ describe('DiarySummaryService', () => {
       expect(result!.reply).toContain('**Calories:** 320 kcal / 2,000 kcal target (1,680 kcal remaining)');
       expect(result!.reply).toContain('**Protein:** 16g / 120g target');
       expect(result!.reply).toContain('* **Breakfast:** Egg Hopper (2 pieces) — 320 kcal');
+
+      // Regression checks for technical review questions
+      const resAte = await service.tryHandleCoachDiaryIntent('user-1', 'How much food have I ate today?', '2026-11-20');
+      expect(resAte).not.toBeNull();
+      expect(resAte!.reply).toContain("Here is what you've logged today (**2026-11-20**):");
+
+      const resCalories = await service.tryHandleCoachDiaryIntent('user-1', 'How many calories did I eat today?', '2026-11-20');
+      expect(resCalories).not.toBeNull();
+      expect(resCalories!.reply).toContain("Here is what you've logged today (**2026-11-20**):");
+
+      const resProtein = await service.tryHandleCoachDiaryIntent('user-1', 'How much protein did I eat today?', '2026-11-20');
+      expect(resProtein).not.toBeNull();
+      expect(resProtein!.reply).toContain("Here is what you've logged today (**2026-11-20**):");
     });
 
     it('should return friendly empty diary message when no meals are logged', async () => {

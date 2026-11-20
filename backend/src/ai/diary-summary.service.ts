@@ -53,10 +53,10 @@ export class DiarySummaryService {
 
     // 2. Intake & consumed totals/calories/macros queries
     if (
-      /(how\s+(much\s+food|much|many)\s+(have\s+i|did\s+i|i\s+have)\s+(eaten|eat|had|consumed|logged))/i.test(clean) ||
+      /(how\s+(much\s+food|much|many)\s+(have\s+i|did\s+i|i\s+have)\s+(eat|eaten|ate|had|consumed|logged))/i.test(clean) ||
       /(what\s+(is|are|'s)\s+my\s+(total\s+)?(intake|calories|macros|nutrition))\s*(today|so far)?/i.test(clean) ||
-      /(how\s+(many|much)\s+(calories|calorie|kcal|macros|macro|food)(\s+(and|&)\s+(calories|calorie|kcal|macros|macro))?\s+(have\s+i|did\s+i)\s+(consumed|eaten|logged|had))/i.test(clean) ||
-      /(how\s+much\s+(protein|carbs|fat)\s+(have\s+i|did\s+i)\s+(eaten|had|consumed|logged))/i.test(clean) ||
+      /(how\s+(many|much)\s+(calories|calorie|kcal|macros|macro|food)(\s+(and|&)\s+(calories|calorie|kcal|macros|macro))?\s+(have\s+i|did\s+i|i\s+have)\s+(eat|eaten|ate|had|consumed|logged))/i.test(clean) ||
+      /(how\s+much\s+(protein|carbs|fat)\s+(have\s+i|did\s+i|i\s+have)\s+(eat|eaten|ate|had|consumed|logged))/i.test(clean) ||
       /(my\s+(calorie|intake|macro)\s+totals?\s*(today|so far)?)/i.test(clean) ||
       /(how\s+are\s+my\s+macros\s+today)/i.test(clean) ||
       /(total\s+intake(\s+today)?)/i.test(clean) ||
