@@ -6,8 +6,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore } from "@/store/useAppStore";
 import { fetchUserProfile, updateUserProfile, type UserProfile } from "@/lib/api";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
-export default function ProfilePage() {
+function ProfileContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const logout = useAppStore((s) => s.logout);
@@ -401,5 +402,13 @@ export default function ProfilePage() {
 
       <AppBottomNav activeTab="profile" />
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <AuthGuard>
+      <ProfileContent />
+    </AuthGuard>
   );
 }
