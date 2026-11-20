@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { GeminiFunctionCallingService } from './gemini-function-calling.service';
 import { ToolDispatcherService, ToolCallRequest } from './tool-dispatcher.service';
 import { CieResponseComposer, CieConversationContext } from './cie-response-composer';
 import { DiarySummaryService } from '../diary-summary.service';
+import { NutritionRagService } from './rag/nutrition-rag.service';
 import { resolveDiaryDate, parseLocalDate } from '../../common/date.util';
 import { RedisService } from '../../redis/redis.service';
 
@@ -18,7 +19,17 @@ export class CieCoachService {
     private readonly toolDispatcher: ToolDispatcherService,
     private readonly diarySummaryService: DiarySummaryService,
     private readonly redisService: RedisService,
+    @Optional() private readonly nutritionRagService?: NutritionRagService,
   ) {}
+
+  /**
+   * Retrieves relevant nutrition knowledge passages from the RAG layer.
+   * Internal CIE interface for contextual knowledge augmentation.
+   */
+  public async getNutritionKnowledgeContext(query: string, limit: number = 2) {
+    if (!this.nutritionRagService) return [];
+    return this.nutritionRagService.searchNutritionKnowledge(query, limit);
+  }
 
   /**
    * Reads feature flag state.

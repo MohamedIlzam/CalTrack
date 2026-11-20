@@ -34,6 +34,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get mealLog() { return this.client.mealLog; }
   get mealLogEntry() { return this.client.mealLogEntry; }
   get weightEntry() { return this.client.weightEntry; }
+  get nutritionKnowledge() { return (this.client as any).nutritionKnowledge; }
 
   // Expose raw query methods
   get $queryRaw() { return this.client.$queryRaw.bind(this.client); }

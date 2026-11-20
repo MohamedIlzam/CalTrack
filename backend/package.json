@@ -16,6 +16,8 @@
     "test": "jest",
     "test:cie-live": "ts-node -r dotenv/config test/cie-live-gemini-smoke.ts",
     "test:cie-verify": "ts-node -r dotenv/config test/cie-coach-integration-verify.ts",
+    "migrate:nutrition-rag": "ts-node -r dotenv/config prisma/apply-migration.ts",
+    "seed:nutrition-rag": "ts-node -r dotenv/config prisma/seed-nutrition-rag.ts",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",

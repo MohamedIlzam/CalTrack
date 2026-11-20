@@ -201,3 +201,20 @@ model WeightEntry {
 
   @@index([userId, recordedAt])
 }
+
+// Curated Nutrition Knowledge for CIE RAG
+model NutritionKnowledge {
+  id          String                      @id @default(uuid())
+  topic       String                      // e.g. 'protein', 'calories', 'macronutrients', 'balanced_diet', 'hydration', 'meal_planning'
+  title       String
+  content     String                      @db.Text
+  sourceTitle String
+  sourceUrl   String
+  provenance  String                      // e.g. 'ISSN Position Stand', 'WHO Fact Sheet'
+  contentHash String                      @unique // SHA-256 hash to prevent duplicate ingestion
+  embedding   Unsupported("vector(384)")
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+
+  @@index([topic])
+}
