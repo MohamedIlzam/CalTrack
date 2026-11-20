@@ -127,22 +127,27 @@ export const useAppStore = create<AppStore>()(
         };
       }),
 
-      logout: () => set({
-        hasOnboarded: false,
-        name: "",
-        email: null,
-        token: null,
-        goal: "lose",
-        weightKg: 0,
-        targetWeightKg: 0,
-        heightCm: 0,
-        activityLevel: "sedentary",
-        targetCalories: 0,
-        targetProteinG: 0,
-        targetCarbsG: 0,
-        targetFatG: 0,
-        entries: [],
-      }),
+      logout: () => {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("token");
+        }
+        set({
+          hasOnboarded: false,
+          name: "",
+          email: null,
+          token: null,
+          goal: "lose",
+          weightKg: 0,
+          targetWeightKg: 0,
+          heightCm: 0,
+          activityLevel: "sedentary",
+          targetCalories: 0,
+          targetProteinG: 0,
+          targetCarbsG: 0,
+          targetFatG: 0,
+          entries: [],
+        });
+      },
     }),
     {
       name: "caltrack-storage",

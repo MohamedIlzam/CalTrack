@@ -1,17 +1,27 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore } from "@/store/useAppStore";
 import { fetchUserProfile, updateUserProfile, type UserProfile } from "@/lib/api";
 
 export default function ProfilePage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const logout = useAppStore((s) => s.logout);
   const storeName = useAppStore((s) => s.name);
   const storeEmail = useAppStore((s) => s.email);
   const setOnboarding = useAppStore((s) => s.setOnboarding);
+
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+    }
+    logout();
+    router.replace("/");
+  };
 
   // Fetch profile from live NestJS backend
   const { data: profile } = useQuery<UserProfile | null>({
@@ -144,7 +154,7 @@ export default function ProfilePage() {
           </div>
 
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-red-500/80 active:scale-95 transition-all text-xs font-bold text-white flex items-center gap-1.5 backdrop-blur-sm border border-white/10"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
