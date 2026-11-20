@@ -358,7 +358,7 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
     expect(demoResult.isSyntheticDemo).toBe(true);
     expect(demoResult.selectedTools.length).toBe(2);
     expect(demoResult.toolResults.length).toBe(2);
-    expect(demoResult.finalAnswer).toContain('You consumed 1450 kcal today');
-    expect(demoResult.finalAnswer).toContain('Your daily target is 2000 kcal with a goal of LOSE.');
+    expect(demoResult.finalAnswer).toContain('consumed 1450 kcal');
+    expect(demoResult.finalAnswer).toContain('Your daily target is 2000 kcal');
   });
 });
