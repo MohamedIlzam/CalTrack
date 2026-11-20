@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { getLocalDateString, parseLocalDate } from '../common/date.util';
 
 export interface AdherenceDay {
   date: string;
@@ -48,9 +49,11 @@ export class ProgressService {
   }
 
   async getAdherence(userId: string, daysLimit: number): Promise<AdherenceDay[]> {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - daysLimit + 1);
-    startDate.setHours(0, 0, 0, 0);
+    const todayStr = getLocalDateString();
+    const todayUtc = parseLocalDate(todayStr);
+
+    const startDate = new Date(todayUtc);
+    startDate.setUTCDate(startDate.getUTCDate() - daysLimit + 1);
 
     // Fetch logs from the calculated start date
     const logs = await this.prisma.mealLog.findMany({
@@ -71,23 +74,21 @@ export class ProgressService {
     // Generate a uniform array of metrics representing the timeline
     const dailyAdherence: AdherenceDay[] = [];
     for (let i = daysLimit - 1; i >= 0; i--) {
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() - i);
-      targetDate.setHours(0, 0, 0, 0);
-
-      const dateString = targetDate.toISOString().split('T')[0];
+      const d = new Date(todayUtc);
+      d.setUTCDate(d.getUTCDate() - i);
+      const dateString = d.toISOString().split('T')[0];
 
       // Find if we have database logs matching this date string
       const log = logs.find((l) => {
-        const logDateStr = new Date(l.date).toISOString().split('T')[0];
+        const logDateStr = l.date.toISOString().split('T')[0];
         return logDateStr === dateString;
       });
 
-      if (log) {
-        const calories = log.entries.reduce((sum, e) => sum + e.loggedCaloriesKcal, 0);
-        const protein = log.entries.reduce((sum, e) => sum + e.loggedProteinG, 0);
-        const carbs = log.entries.reduce((sum, e) => sum + e.loggedCarbohydratesG, 0);
-        const fat = log.entries.reduce((sum, e) => sum + e.loggedFatG, 0);
+      if (log && log.entries.length > 0) {
+        const calories = Math.round(log.entries.reduce((sum, e) => sum + e.loggedCaloriesKcal, 0));
+        const protein = Math.round(log.entries.reduce((sum, e) => sum + e.loggedProteinG, 0) * 10) / 10;
+        const carbs = Math.round(log.entries.reduce((sum, e) => sum + e.loggedCarbohydratesG, 0) * 10) / 10;
+        const fat = Math.round(log.entries.reduce((sum, e) => sum + e.loggedFatG, 0) * 10) / 10;
 
         dailyAdherence.push({
           date: dateString,
