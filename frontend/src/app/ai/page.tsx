@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
+import { AppHeader } from "@/components/ui/AppHeader";
 import { sendCoachChat } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
 import { FormattedText, renderSafeInline } from "@/components/ui/FormattedText";
@@ -187,32 +188,22 @@ export default function AIChatPage() {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[#F9F9F9] relative">
-      {/* ── Fixed Header ── */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-white/85 backdrop-blur-xl flex justify-between items-center px-6 py-4 border-b border-gray-100/60 max-w-md mx-auto">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => window.history.back()}
-            className="hover:opacity-70 active:scale-95 transition-all p-1"
-            title="Go Back"
-          >
-            <svg
-              className="w-5 h-5 text-[#006B5F]"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#2DD4BF] flex items-center justify-center shadow-sm">
+      {/* ── Unified Top Header ── */}
+      <AppHeader />
+
+      {/* ── Scrollable Chat Thread ── */}
+      <div
+        ref={scrollRef}
+        className={`flex-1 overflow-y-auto pt-[76px] ${
+          hasStarted ? "pb-[160px]" : "pb-[230px]"
+        } px-5 space-y-5 max-w-md mx-auto w-full`}
+      >
+        {/* ── AI Coach Sub-bar ── */}
+        <div className="flex items-center justify-between pt-2 pb-2.5 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-[#2DD4BF] flex items-center justify-center shadow-xs">
               <svg
-                className="w-4 h-4 text-[#004E45]"
+                className="w-3.5 h-3.5 text-[#004E45]"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -226,36 +217,28 @@ export default function AIChatPage() {
               </svg>
             </div>
             <div>
-              <h1 className="font-extrabold text-[#006B5F] text-[17px] tracking-tight leading-none">
+              <h2 className="font-extrabold text-[#006B5F] text-[14px] tracking-tight leading-none">
                 AI Coach
-              </h1>
-              <p className="text-[10px] font-semibold text-[#006B5F] mt-0.5 flex items-center gap-1">
+              </h2>
+              <p className="text-[10px] font-semibold text-[#006B5F]/80 mt-0.5 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                CalTrack AI
+                CalTrack Intelligence
               </p>
             </div>
           </div>
+
+          {/* Reset Conversation Button */}
+          <button
+            onClick={handleClearChat}
+            title="Reset Conversation"
+            className="hover:bg-red-50 text-gray-400 hover:text-red-500 active:scale-95 transition-all text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>Reset</span>
+          </button>
         </div>
-
-        {/* Clear Chat Button */}
-        <button
-          onClick={handleClearChat}
-          title="Reset Conversation"
-          className="hover:bg-red-50 text-gray-400 hover:text-red-500 active:scale-95 transition-all w-8 h-8 flex items-center justify-center rounded-full"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-      </header>
-
-      {/* ── Scrollable Chat Thread ── */}
-      <div
-        ref={scrollRef}
-        className={`flex-1 overflow-y-auto pt-[86px] ${
-          hasStarted ? "pb-[160px]" : "pb-[230px]"
-        } px-5 space-y-6 max-w-md mx-auto w-full`}
-      >
         {messages.map((msg) => {
           if (msg.role === "user") {
             return (

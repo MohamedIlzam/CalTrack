@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
+import { AppHeader } from "@/components/ui/AppHeader";
 import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore";
 import { postLogMeal, deleteMealEntry, updateMealEntry, type UpdateMealPayload, parseAiPrompt, scanMealImage, fetchWithTimeout } from "@/lib/api";
 import { MealPlateCard } from "@/components/meal/MealPlateCard";
@@ -690,24 +691,8 @@ function SearchContent() {
   return (
     <div className={`min-h-screen bg-[#F9F9F9] font-sans antialiased ${plateItems.length > 0 ? "pb-[380px]" : "pb-[100px]"}`}>
 
-      {/* ── Top Bar ────────────────────────────────────────────────────────────── */}
-      <header className="fixed top-0 left-0 right-0 z-40 w-full px-6 py-4 bg-white/80 backdrop-blur-xl flex justify-between items-center border-b border-gray-100/50">
-        <div className="flex items-center gap-3">
-          <svg className="w-5 h-5 text-[#006B5F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <h1 className="text-[18px] font-extrabold text-[#006B5F] tracking-tight leading-none mb-[2px]">
-            Search Food
-          </h1>
-        </div>
-        <div className="w-8 h-8 rounded-full overflow-hidden border border-[#006B5F]/20">
-          <img
-            alt="User Profile"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAUh-XIBE2J31PmpJvSQACtd3ynGwpljpkllwIpUwg8uNtWhuilvURliuBnwz46eEu4ZQJRvMRL9c5zl7IzfMQIuXLBocp05a8VItkdLwX_3n0M-DqhTt6SBK1ON6hl8rLqF3iGAO2HNUxtnDVOFB1vtZZEhU50dww2sT4Xjg9Br8QERzU7mh8nZlhuP5v4D9DBWQBxpQClG5JUr8sluhT1mpSSCWmYIk-ydCNhSiJX4wwB-P3t8BT0fhRr-2vZAGxpAOx_A1S_ZC0"
-            className="w-full h-full object-cover"
-          />
-        </div>
-      </header>
+      {/* ── Top Bar (Unified Header) ────────────────────────────────────────── */}
+      <AppHeader />
 
       <main className="pt-[88px] px-6 max-w-screen-xl mx-auto flex flex-col gap-6">
 

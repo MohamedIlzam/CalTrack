@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
+import { AppHeader } from "@/components/ui/AppHeader";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { useAppStore } from "@/store/useAppStore";
 import {
@@ -249,50 +250,52 @@ function ProgressContent() {
   }, [weightHistory, targetWeightKg]);
 
   return (
-    <div className="min-h-screen font-sans bg-[#F9FAFB] text-[#1A1C1C] pb-28">
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="font-headline font-black text-xl tracking-tight text-[#1A1C1C]">
-            Progress & Analytics
-          </h1>
-          <p className="text-xs font-semibold text-[#006B5F] mt-0.5">
-            CalTrack Nutrition Intelligence
-          </p>
-        </div>
-
-        {/* Date Range Selector Pill */}
-        <div className="flex bg-gray-100 p-1 rounded-xl">
-          <button
-            onClick={() => {
-              setRange(7);
-              setSelectedDate(null);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              range === 7
-                ? "bg-[#006B5F] text-white shadow-sm"
-                : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            7 Days
-          </button>
-          <button
-            onClick={() => {
-              setRange(30);
-              setSelectedDate(null);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              range === 30
-                ? "bg-[#006B5F] text-white shadow-sm"
-                : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            30 Days
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen font-sans bg-[#F9FAFB] text-[#1A1C1C] pb-28 pt-[72px]">
+      {/* Unified Top Header with iPhone Safe Area */}
+      <AppHeader />
 
       <main className="max-w-2xl mx-auto px-5 pt-6 space-y-6">
+        {/* Progress & Analytics Title + Range Toggle */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-headline font-black text-xl tracking-tight text-[#1A1C1C]">
+              Progress & Analytics
+            </h1>
+            <p className="text-xs font-semibold text-[#006B5F] mt-0.5">
+              CalTrack Nutrition Intelligence
+            </p>
+          </div>
+
+          {/* Date Range Selector Pill */}
+          <div className="flex bg-gray-100 p-1 rounded-xl">
+            <button
+              onClick={() => {
+                setRange(7);
+                setSelectedDate(null);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                range === 7
+                  ? "bg-[#006B5F] text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              7 Days
+            </button>
+            <button
+              onClick={() => {
+                setRange(30);
+                setSelectedDate(null);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                range === 30
+                  ? "bg-[#006B5F] text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              30 Days
+            </button>
+          </div>
+        </div>
         {/* Loading Skeleton */}
         {isAdherenceLoading && (
           <div className="space-y-4 animate-pulse">
