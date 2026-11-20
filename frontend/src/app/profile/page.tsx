@@ -162,13 +162,10 @@ function ProfileContent() {
       return;
     }
 
-    // Always compute authoritative targets before saving
-    const computedTargets = calculateNutritionTargets({
-      weightKg: parsedWeight,
-      heightCm: parsedHeight,
-      activityLevel,
-      goal,
-    });
+    const parsedCalories = parseInt(targetCalories, 10) || undefined;
+    const parsedProtein = parseInt(targetProteinG, 10) || undefined;
+    const parsedCarbs = parseInt(targetCarbsG, 10) || undefined;
+    const parsedFat = parseInt(targetFatG, 10) || undefined;
 
     updateMutation.mutate({
       name,
@@ -177,10 +174,10 @@ function ProfileContent() {
       heightCm: parsedHeight,
       goal,
       activityLevel,
-      targetCalories: computedTargets.targetCalories,
-      targetProteinG: computedTargets.targetProteinG,
-      targetCarbsG: computedTargets.targetCarbsG,
-      targetFatG: computedTargets.targetFatG,
+      targetCalories: parsedCalories,
+      targetProteinG: parsedProtein,
+      targetCarbsG: parsedCarbs,
+      targetFatG: parsedFat,
       timezone,
     });
   };
@@ -325,16 +322,15 @@ function ProfileContent() {
 
             {/* Target Calories Display */}
             <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Target Daily Calories</label>
-                <span className="text-[9px] font-bold text-[#006B5F] bg-[#006B5F]/10 px-2 py-0.5 rounded-full uppercase tracking-wider">Auto-calculated</span>
-              </div>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Target Daily Calories</label>
               <div className="relative">
                 <input
-                  type="text"
-                  readOnly
+                  type="number"
+                  step="50"
+                  min="500"
                   value={targetCalories}
-                  className="w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-sm font-black text-[#1A1C1C] cursor-default select-none focus:outline-none"
+                  onChange={(e) => setTargetCalories(e.target.value)}
+                  className="w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl focus:border-[#006B5F] focus:bg-white focus:outline-none text-sm font-black text-[#1A1C1C]"
                 />
                 <span className="absolute right-4 top-3 text-xs font-bold text-gray-400">kcal</span>
               </div>
@@ -371,10 +367,11 @@ function ProfileContent() {
                 <span className="text-[10px] font-extrabold text-[#D97706] uppercase">Protein ({macroBreakdown.proteinPct}%)</span>
                 <div className="relative">
                   <input
-                    type="text"
-                    readOnly
+                    type="number"
+                    min="0"
                     value={targetProteinG}
-                    className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-xl text-xs font-black text-[#1A1C1C] cursor-default select-none focus:outline-none"
+                    onChange={(e) => setTargetProteinG(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-xl text-xs font-black text-[#1A1C1C] focus:border-[#D97706] focus:outline-none"
                   />
                   <span className="absolute right-2 top-2 text-[10px] font-bold text-gray-400">g</span>
                 </div>
@@ -384,10 +381,11 @@ function ProfileContent() {
                 <span className="text-[10px] font-extrabold text-[#0D9488] uppercase">Carbs ({macroBreakdown.carbsPct}%)</span>
                 <div className="relative">
                   <input
-                    type="text"
-                    readOnly
+                    type="number"
+                    min="0"
                     value={targetCarbsG}
-                    className="w-full px-2.5 py-1.5 bg-white border border-teal-200 rounded-xl text-xs font-black text-[#1A1C1C] cursor-default select-none focus:outline-none"
+                    onChange={(e) => setTargetCarbsG(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-teal-200 rounded-xl text-xs font-black text-[#1A1C1C] focus:border-[#0D9488] focus:outline-none"
                   />
                   <span className="absolute right-2 top-2 text-[10px] font-bold text-gray-400">g</span>
                 </div>
@@ -397,10 +395,11 @@ function ProfileContent() {
                 <span className="text-[10px] font-extrabold text-gray-600 uppercase">Fat ({macroBreakdown.fatPct}%)</span>
                 <div className="relative">
                   <input
-                    type="text"
-                    readOnly
+                    type="number"
+                    min="0"
                     value={targetFatG}
-                    className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-black text-[#1A1C1C] cursor-default select-none focus:outline-none"
+                    onChange={(e) => setTargetFatG(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-black text-[#1A1C1C] focus:border-gray-500 focus:outline-none"
                   />
                   <span className="absolute right-2 top-2 text-[10px] font-bold text-gray-400">g</span>
                 </div>

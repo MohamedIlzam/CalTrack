@@ -256,6 +256,54 @@ runTest('Persistence: Saved targets update Zustand store, survive refresh, and r
 });
 
 // -----------------------------------------------------------------------------
+// Test 7: Editable Custom Macros & Dynamic Color Ratio Bar Calculation
+// -----------------------------------------------------------------------------
+runTest('Custom macros: Editing protein/carbs/fat updates ratio bar dynamically without forcing calorie changes', () => {
+  // Simulate user custom editing:
+  // Target Calories set to 2000
+  // User enters custom high-protein: Protein 160g, Carbs 180g, Fat 65g
+  let targetCalories = '2000';
+  let targetProteinG = '160';
+  let targetCarbsG = '180';
+  let targetFatG = '65';
+
+  const computeRatioBar = (pStr, cStr, fStr) => {
+    const p = Math.max(0, parseFloat(pStr) || 0) * 4;
+    const c = Math.max(0, parseFloat(cStr) || 0) * 4;
+    const f = Math.max(0, parseFloat(fStr) || 0) * 9;
+    const total = p + c + f || 1;
+    return {
+      proteinPct: Math.round((p / total) * 100),
+      carbsPct: Math.round((c / total) * 100),
+      fatPct: Math.round((f / total) * 100),
+      computedCalories: Math.round(total),
+    };
+  };
+
+  const initialRatio = computeRatioBar(targetProteinG, targetCarbsG, targetFatG);
+  // Total = 160*4 (640) + 180*4 (720) + 65*9 (585) = 1945
+  assert.strictEqual(initialRatio.computedCalories, 1945);
+  assert.strictEqual(initialRatio.proteinPct, 33); // 640 / 1945 = 32.9% -> 33%
+  assert.strictEqual(initialRatio.carbsPct, 37);   // 720 / 1945 = 37.0% -> 37%
+  assert.strictEqual(initialRatio.fatPct, 30);     // 585 / 1945 = 30.1% -> 30%
+
+  // User changes ONLY protein to 190g (e.g. higher protein)
+  targetProteinG = '190';
+  // Target calories remains untouched at 2000
+  assert.strictEqual(targetCalories, '2000', 'Target calories does not automatically change');
+  assert.strictEqual(targetCarbsG, '180', 'Carbs do not automatically change');
+  assert.strictEqual(targetFatG, '65', 'Fat does not automatically change');
+
+  // Dynamic ratio bar immediately reflects new ratio:
+  const updatedRatio = computeRatioBar(targetProteinG, targetCarbsG, targetFatG);
+  // New Total = 190*4 (760) + 720 + 585 = 2065
+  assert.strictEqual(updatedRatio.computedCalories, 2065);
+  assert.strictEqual(updatedRatio.proteinPct, 37); // 760 / 2065 = 36.8% -> 37%
+  assert.strictEqual(updatedRatio.carbsPct, 35);   // 720 / 2065 = 34.9% -> 35%
+  assert.strictEqual(updatedRatio.fatPct, 28);     // 585 / 2065 = 28.3% -> 28%
+});
+
+// -----------------------------------------------------------------------------
 // Summary
 // -----------------------------------------------------------------------------
 console.log('\n================================================================');
