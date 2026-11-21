@@ -303,5 +303,76 @@ describe('AiService', () => {
       expect(demoContext.isSyntheticDemo).toBe(true);
       expect(demoContext.goal).toBe('Sample Archetype');
     });
+
+    it('should safely extract and parse JSON from direct, markdown-fenced, and embedded responses', () => {
+      // 1. Direct JSON
+      const direct = '{"isFood": true, "name": "Chicken"}';
+      expect(service.extractAndParseJson(direct)).toEqual({ isFood: true, name: 'Chicken' });
+
+      // 2. Markdown fenced JSON
+      const fenced = '```json\n{"isFood": true, "name": "Rice and Curry", "kcalPerServing": 550}\n```';
+      expect(service.extractAndParseJson(fenced)).toEqual({
+        isFood: true,
+        name: 'Rice and Curry',
+        kcalPerServing: 550,
+      });
+
+      // 3. Embedded JSON with surrounding conversational commentary
+      const embedded =
+        'Here is the nutritional estimate: {"isFood": true, "name": "Dhal", "kcalPerServing": 180}. Hope this helps!';
+      expect(service.extractAndParseJson(embedded)).toEqual({
+        isFood: true,
+        name: 'Dhal',
+        kcalPerServing: 180,
+      });
+
+      // 4. Malformed JSON throws
+      expect(() => service.extractAndParseJson('Not JSON at all')).toThrow('could not be parsed as valid JSON');
+      expect(() => service.extractAndParseJson('{ invalid: json')).toThrow('could not be parsed as valid JSON');
+    });
+
+    it('should correctly parse numeric and string nutrient values with unit suffixes', () => {
+      expect(service.parseNutrientValue(250)).toBe(250);
+      expect(service.parseNutrientValue('250')).toBe(250);
+      expect(service.parseNutrientValue('250 kcal')).toBe(250);
+      expect(service.parseNutrientValue('35.5g')).toBe(35.5);
+      expect(service.parseNutrientValue('~400')).toBe(400);
+
+      expect(Number.isNaN(service.parseNutrientValue(null))).toBe(true);
+      expect(Number.isNaN(service.parseNutrientValue(undefined))).toBe(true);
+      expect(Number.isNaN(service.parseNutrientValue('unknown'))).toBe(true);
+      expect(Number.isNaN(service.parseNutrientValue(NaN))).toBe(true);
+    });
+
+    it('should coerce string nutrients in valid food suggestions', () => {
+      const parsedWithStrings = {
+        name: 'Chicken Rice',
+        kcalPerServing: '520 kcal',
+        proteinPerServing: '28g',
+        carbsPerServing: '65g',
+        fatPerServing: '12g',
+        category: 'Rice & Bread',
+      };
+
+      const result = service.validateFoodSuggestionOutput(parsedWithStrings, 'Chicken Rice');
+      expect(result.kcalPerServing).toBe(520);
+      expect(result.proteinPerServing).toBe(28);
+      expect(result.carbsPerServing).toBe(65);
+      expect(result.fatPerServing).toBe(12);
+    });
+
+    it('should reject missing or non-finite nutrients', () => {
+      const invalidNutrients = {
+        name: 'Ghost Pepper',
+        kcalPerServing: 'infinite',
+        proteinPerServing: 0,
+        carbsPerServing: 0,
+        fatPerServing: 0,
+      };
+
+      expect(() =>
+        service.validateFoodSuggestionOutput(invalidNutrients, 'Ghost Pepper'),
+      ).toThrow('AI nutrient values must be valid finite numbers');
+    });
   });
 });

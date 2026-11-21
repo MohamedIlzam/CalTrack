@@ -116,6 +116,84 @@ export class GeminiFunctionCallingService {
   }
 
   /**
+   * Safe promise timeout wrapper preventing indefinite worker hangs if third-party SDK stalls.
+   */
+  private async callWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    timeoutMessage: string,
+  ): Promise<T> {
+    let timer: NodeJS.Timeout;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    });
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timer!);
+    }
+  }
+
+  /**
+   * Fast-path deterministic detection for standard diary, target, and history queries.
+   * Eliminates unnecessary external API latency and preserves quota for requests
+   * that can be answered entirely from local user records.
+   */
+  public detectDeterministicToolCalls(
+    prompt: string,
+    currentDateStr: string = '2026-11-20',
+  ): ToolCallRequest[] | null {
+    const clean = prompt.toLowerCase().trim();
+
+    // 1. Explicit target queries
+    if (
+      /\b(what\s+(are|is)\s+my\s+(daily\s+)?(calorie\s+|macro\s+|nutrition\s+)?(targets?|goals?))\b/i.test(clean) ||
+      /\b(my\s+(daily\s+)?(calorie|macro|nutrition)\s+(targets?|goals?))\b/i.test(clean) ||
+      /^(what\s+is\s+my\s+daily\s+calorie\s+target\??)$/i.test(clean) ||
+      /^(what\s+are\s+my\s+nutrition\s+targets\??)$/i.test(clean) ||
+      /^(show\s+my\s+targets\??)$/i.test(clean)
+    ) {
+      return [{ name: 'getNutritionTargets', args: {} }];
+    }
+
+    // 2. Remaining budget queries (needs both daily intake and targets)
+    if (
+      /\b(still\s+need|left|remaining)\b/i.test(clean) &&
+      /\b(protein|calories?|kcal|carbs?|fat|budget)\b/i.test(clean)
+    ) {
+      return [
+        { name: 'getDailyNutrition', args: { date: currentDateStr } },
+        { name: 'getNutritionTargets', args: {} },
+      ];
+    }
+
+    // 3. Yesterday's diary queries
+    if (/\byesterday\b/i.test(clean) && /\b(eat|ate|eaten|logged|had|meals?|intake|calories?)\b/i.test(clean)) {
+      const today = new Date(currentDateStr + 'T12:00:00Z');
+      today.setUTCDate(today.getUTCDate() - 1);
+      const yDate = today.toISOString().split('T')[0];
+      return [{ name: 'getDailyNutrition', args: { date: yDate } }];
+    }
+
+    // 4. Multi-day history queries
+    const historyMatch = clean.match(/\b(?:last|past)\s+(seven|\d+)\s+days?\b/i);
+    if (historyMatch && /\b(intake|eat|ate|food|meals?|history|logged|consistency)\b/i.test(clean)) {
+      const days = historyMatch[1].toLowerCase() === 'seven' ? 7 : parseInt(historyMatch[1], 10);
+      return [{ name: 'getFoodHistory', args: { days: Math.min(Math.max(days || 7, 1), 7) } }];
+    }
+
+    // 5. Today's intake/macro queries
+    if (
+      (/\btoday\b/i.test(clean) || /\bso far\b/i.test(clean)) &&
+      /\b(eat|eaten|ate|logged|had|intake|protein|calories?|carbs?|fat|macros?)\b/i.test(clean)
+    ) {
+      return [{ name: 'getDailyNutrition', args: { date: currentDateStr } }];
+    }
+
+    return null;
+  }
+
+  /**
    * Analyzes a natural-language prompt using Gemini (or a mock in test environments)
    * to determine which read-only nutrition tools should be invoked.
    */
@@ -130,6 +208,16 @@ export class GeminiFunctionCallingService {
         hasFunctionCalls: mockToolCalls.length > 0,
         functionCalls: mockToolCalls,
         modelUsed: 'mock-gemini-adapter',
+      };
+    }
+
+    // Fast-path deterministic mapping: avoids Gemini API calls when query maps directly to local records
+    const deterministicCalls = this.detectDeterministicToolCalls(prompt, currentDateStr);
+    if (deterministicCalls && deterministicCalls.length > 0) {
+      return {
+        hasFunctionCalls: true,
+        functionCalls: deterministicCalls,
+        modelUsed: 'deterministic-fast-path',
       };
     }
 
@@ -156,29 +244,37 @@ Do NOT attempt to guess or hallucinate diary data without calling the tools.`;
       let response: any;
       let usedModel = this.modelName;
       try {
-        response = await ai.models.generateContent({
-          model: this.modelName,
-          contents: prompt,
-          config: {
-            systemInstruction,
-            tools: [{ functionDeclarations: NUTRITION_TOOL_DECLARATIONS as any }],
-            temperature: 0.1,
-          },
-        });
-      } catch (firstErr: any) {
-        if (this.isTransientError(firstErr)) {
-          this.logger.warn(`Transient Gemini tool selection error on ${this.modelName} (${firstErr.message}). Retrying on fallback model ${this.fallbackModelName} after backoff...`);
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          usedModel = this.fallbackModelName;
-          response = await ai.models.generateContent({
-            model: this.fallbackModelName,
+        response = await this.callWithTimeout(
+          ai.models.generateContent({
+            model: this.modelName,
             contents: prompt,
             config: {
               systemInstruction,
               tools: [{ functionDeclarations: NUTRITION_TOOL_DECLARATIONS as any }],
               temperature: 0.1,
             },
-          });
+          }),
+          7000,
+          'Gemini tool selection timed out after 7s',
+        );
+      } catch (firstErr: any) {
+        if (this.isTransientError(firstErr)) {
+          this.logger.warn(`Transient Gemini tool selection error on ${this.modelName} (${firstErr.message}). Retrying on fallback model ${this.fallbackModelName} after backoff...`);
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          usedModel = this.fallbackModelName;
+          response = await this.callWithTimeout(
+            ai.models.generateContent({
+              model: this.fallbackModelName,
+              contents: prompt,
+              config: {
+                systemInstruction,
+                tools: [{ functionDeclarations: NUTRITION_TOOL_DECLARATIONS as any }],
+                temperature: 0.1,
+              },
+            }),
+            7000,
+            'Gemini tool selection retry timed out after 7s',
+          );
         } else {
           throw firstErr;
         }

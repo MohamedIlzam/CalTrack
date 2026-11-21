@@ -86,6 +86,42 @@ describe('GeminiFunctionCallingService (CIE Impl 02B: Real Function-Calling Veri
       expect(result.functionCalls[0].name).toBe('getFoodHistory');
       expect(result.functionCalls[0].args).toEqual({ days: 7 });
     });
+
+    it('detects deterministic tool calls locally without external LLM calls for obvious nutrition questions', async () => {
+      // 1. Target questions
+      const targets = service.detectDeterministicToolCalls('What is my daily calorie target?', '2026-11-20');
+      expect(targets).toEqual([{ name: 'getNutritionTargets', args: {} }]);
+
+      // 2. Remaining budget questions
+      const remaining = service.detectDeterministicToolCalls('How much protein do I still need today?', '2026-11-20');
+      expect(remaining).toEqual([
+        { name: 'getDailyNutrition', args: { date: '2026-11-20' } },
+        { name: 'getNutritionTargets', args: {} },
+      ]);
+
+      // 3. Yesterday's diary questions
+      const yesterday = service.detectDeterministicToolCalls('What did I eat yesterday?', '2026-11-20');
+      expect(yesterday).toEqual([{ name: 'getDailyNutrition', args: { date: '2026-11-19' } }]);
+
+      // 4. Food history questions
+      const history = service.detectDeterministicToolCalls('How has my food intake been over the last seven days?', '2026-11-20');
+      expect(history).toEqual([{ name: 'getFoodHistory', args: { days: 7 } }]);
+
+      // 5. Today's intake questions
+      const today = service.detectDeterministicToolCalls('How much protein have I eaten today?', '2026-11-20');
+      expect(today).toEqual([{ name: 'getDailyNutrition', args: { date: '2026-11-20' } }]);
+
+      // 6. Conversational or non-deterministic inquiry returns null
+      const nonDeterministic = service.detectDeterministicToolCalls('Can you give me advice on creatine?', '2026-11-20');
+      expect(nonDeterministic).toBeNull();
+    });
+
+    it('uses deterministic fast-path when selectTools is called without mockToolCalls on local queries', async () => {
+      const result = await service.selectTools('What is my daily calorie target?', '2026-11-20');
+      expect(result.hasFunctionCalls).toBe(true);
+      expect(result.modelUsed).toBe('deterministic-fast-path');
+      expect(result.functionCalls[0].name).toBe('getNutritionTargets');
+    });
   });
 
   // ---------------------------------------------------------------------------

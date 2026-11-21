@@ -53,6 +53,7 @@ export interface FetchWithTimeoutOptions extends RequestInit {
 
 const DEFAULT_TIMEOUT_MS = 15000; // 15 seconds default
 const COLD_START_TIMEOUT_MS = 45000; // 45 seconds for cold start retry
+export const AI_REQUEST_TIMEOUT_MS = 25000; // 25 seconds for AI inference requests (parse prompt, chat, vision)
 
 export async function fetchWithTimeout(
   url: string,
@@ -108,7 +109,9 @@ export async function fetchWithTimeout(
 
       if (err?.name === 'AbortError' || controller.signal.aborted) {
         throw new Error(
-          `Connection timed out after ${Math.round(currentTimeout / 1000)}s. The backend may be waking up from sleep. Please try again.`
+          currentTimeout >= 20000
+            ? `AI request timed out after ${Math.round(currentTimeout / 1000)}s. The AI service is experiencing high demand. Please try again.`
+            : `Connection timed out after ${Math.round(currentTimeout / 1000)}s. The backend may be waking up from sleep. Please try again.`
         );
       }
       throw err;
@@ -418,7 +421,7 @@ export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ prompt }),
-  }, 15000);
+  }, AI_REQUEST_TIMEOUT_MS);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
@@ -440,7 +443,7 @@ export async function sendCoachChat(message: string, date?: string): Promise<{ r
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ message, date, timeZone }),
-  }, 15000);
+  }, AI_REQUEST_TIMEOUT_MS);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));
@@ -461,7 +464,7 @@ export async function scanMealImage(imageBase64: string): Promise<AiParseRespons
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ imageBase64 }),
-  }, 25000);
+  }, AI_REQUEST_TIMEOUT_MS);
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: res.statusText }));

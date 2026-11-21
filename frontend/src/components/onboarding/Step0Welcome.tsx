@@ -22,6 +22,7 @@ export function Step0Welcome({ onNext, onLogin }: Props) {
           src="/images/new-hero.png"
           alt="Sri Lankan Cuisine"
           fill
+          sizes="(max-width: 640px) 100vw, 420px"
           className="object-cover"
           priority
         />
