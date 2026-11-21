@@ -10,6 +10,10 @@ import {
   DailyNutritionResult,
   NutritionTargetsResult,
   FoodHistoryResult,
+  FoodCatalogLookupResult,
+  WeightProgressResult,
+  MealPatternResult,
+  CatalogRecommendationResult,
 } from './nutrition-tools.types';
 import { DispatchedToolResult } from './tool-dispatcher.service';
 
@@ -18,6 +22,8 @@ export interface CieConversationContext {
   isRecommendation?: boolean;
   isProfile?: boolean;
   lastDate?: string;
+  lastIntent?: string;
+  lastFoodQuery?: string;
   updatedAt?: number;
 }
 
@@ -296,6 +302,7 @@ export class CieResponseComposer {
   public static composeRecommendationResponse(
     daily?: DailyNutritionResult | null,
     targets?: NutritionTargetsResult | null,
+    recommendations?: CatalogRecommendationResult | null,
     context?: CieConversationContext,
   ): string {
     const lines: string[] = [];
@@ -329,56 +336,49 @@ export class CieResponseComposer {
       lines.push('');
     }
 
-    // 2. Grounded suggestions based on remaining macros
-    lines.push('**Recommended Dishes from CalTrack Database:**');
-
-    if (remainingProteinG !== null && remainingProteinG > 20) {
-      // Prioritize high-protein options
-      lines.push(
-        '* **Chicken Curry** (1 piece / ~120g: **220 kcal**, **24g protein**, 4g carbs, 12g fat) — High-quality lean protein, ideal to close your protein gap.',
-      );
-      lines.push(
-        '* **Fish Ambul Thiyal** (1 piece / ~50g: **80 kcal**, **12g protein**, 2g carbs, 2g fat) — Traditional sour fish, high protein density with minimal calories.',
-      );
-      lines.push(
-        '* **Dhal Curry (Parippu)** (1 cup / ~150g: **180 kcal**, **9g protein**, 25g carbs, 5g fat) — Rich in dietary fiber and plant protein.',
-      );
-      lines.push(
-        '* **Boiled Egg** (1 piece / ~50g: **78 kcal**, **6.3g protein**, 0.6g carbs, 5.3g fat) — Fast, bioavailable protein boost.',
-      );
-    } else if (remainingKcal !== null && remainingKcal <= 300) {
-      // Light / calorie-conscious options
-      lines.push(
-        '* **Fish Ambul Thiyal** (1 piece / ~50g: **80 kcal**, **12g protein**, 2g carbs, 2g fat) — High protein while preserving your calorie deficit.',
-      );
-      lines.push(
-        '* **Gotu Kola Sambol** (1 cup / ~60g: **55 kcal**, **1.5g protein**, 6g carbs, 2.5g fat) — Micronutrient-rich green salad with low energy density.',
-      );
-      lines.push(
-        '* **Boiled Egg** (1 piece / ~50g: **78 kcal**, **6.3g protein**, 0.6g carbs, 5.3g fat) — Satiating, low-calorie protein snack.',
-      );
-      lines.push(
-        '* **Ambul Banana** (1 piece / ~80g: **75 kcal**, **0.9g protein**, 19g carbs, 0.2g fat) — Quick natural carbohydrate replenishment.',
-      );
+    const foods = recommendations?.foods || [];
+    lines.push('**Suggestions from the CalTrack food catalog:**');
+    if (foods.length === 0) {
+      lines.push('* I could not find a catalog item that safely matches your remaining budget. Try Search or add a clearly labelled custom estimate.');
     } else {
-      // Balanced plate suggestions
-      lines.push(
-        '* **Red Rice with Chicken Curry & Dhal** (~1 cup rice + 1 piece chicken + 1/2 cup dhal: **510 kcal**, **32.5g protein**, 55.5g carbs, 14.5g fat) — Complete, culturally authentic balanced plate.',
-      );
-      lines.push(
-        '* **Egg Hopper with Gotu Kola Sambol** (1 egg hopper + 1/2 cup sambol: **187 kcal**, **8.8g protein**, 21g carbs, 7.3g fat) — Light, satisfying breakfast or evening meal.',
-      );
-      lines.push(
-        '* **String Hoppers with Dhal & Pol Sambol** (5 string hoppers + 1/2 cup dhal + 1 tbsp pol sambol: **265 kcal**, **7.5g protein**, 42g carbs, 7g fat) — Moderate-calorie traditional staple.',
-      );
+      for (const food of foods) {
+        const quality = food.isVerified ? 'Verified catalog item' : 'Catalog estimate';
+        lines.push(`* **${food.name}** (${food.servingDescription}, ${food.servingGrams}g): **${food.calories} kcal**, **${food.protein}g protein**, ${food.carbs}g carbs, ${food.fat}g fat — ${quality}.`);
+      }
     }
 
     lines.push('');
     lines.push('You can search and add any of these items directly from the **Search** screen or build your plate on **Home**.');
     lines.push(
-      '_Note: CalTrack V1 provides grounded recommendations from our verified nutritional database. Full generative multi-day meal planning is planned for CIE V2._',
+      `_Source note: These are ${recommendations?.basis === 'verified_catalog' ? 'verified' : 'available'} CalTrack catalog rows, ranked locally. They are not a generated multi-day meal plan._`,
     );
 
+    return lines.join('\n');
+  }
+
+  public static composeCatalogResponse(lookups: FoodCatalogLookupResult[]): string {
+    const foods = lookups.flatMap((lookup) => lookup.foods);
+    if (foods.length === 0) {
+      return 'I could not find that food in the CalTrack catalog. You can use Ingredient Creator for a clearly labelled estimate and confirm the serving before logging it.';
+    }
+    const lines = ['Here are the closest matches from the **CalTrack food catalog**:', ''];
+    for (const food of foods.slice(0, 8)) {
+      const quality = food.isVerified ? 'Verified' : 'Catalog estimate';
+      lines.push(`* **${food.name}** — ${food.servingDescription} (${food.servingGrams}g): **${food.calories} kcal**, ${food.protein}g protein, ${food.carbs}g carbs, ${food.fat}g fat · ${quality}`);
+    }
+    return lines.join('\n');
+  }
+
+  public static composeWeightProgress(result: WeightProgressResult): string {
+    if (result.entries.length === 0) return `You have no weight entries in the last ${result.days} days.`;
+    const direction = result.changeKg === null || result.changeKg === 0 ? 'no net change' : `${Math.abs(result.changeKg)} kg ${result.changeKg > 0 ? 'increase' : 'decrease'}`;
+    return `Over the last **${result.days} days**, your recorded weight changed from **${result.firstWeightKg} kg** to **${result.latestWeightKg} kg** (${direction}), based on ${result.entries.length} recorded entr${result.entries.length === 1 ? 'y' : 'ies'}.`;
+  }
+
+  public static composeMealPatterns(result: MealPatternResult): string {
+    if (result.commonFoods.length === 0) return `There are no logged foods to summarize in the last ${result.days} days.`;
+    const lines = [`Across **${result.loggedDaysCount} logged days** in the last ${result.days} days, your most commonly logged foods were:`, ''];
+    result.commonFoods.forEach((food) => lines.push(`* **${food.name}** — ${food.occurrences} log${food.occurrences === 1 ? '' : 's'}`));
     return lines.join('\n');
   }
 
@@ -387,7 +387,7 @@ export class CieResponseComposer {
    * Directly solves combined questions (e.g. "How much protein do I still need today?").
    */
   public static composeCombinedResponse(
-    toolResults: DispatchedToolResult[],
+    toolResults: DispatchedToolResult[] = [],
     context?: CieConversationContext,
   ): string {
     const dailyRes = toolResults.find((r) => r.tool === 'getDailyNutrition' && r.success)?.data as
@@ -399,10 +399,14 @@ export class CieResponseComposer {
     const historyRes = toolResults.find((r) => r.tool === 'getFoodHistory' && r.success)?.data as
       | FoodHistoryResult
       | undefined;
+    const catalogResults = toolResults.filter((r) => r.tool === 'lookupFoods' && r.success).map((r) => r.data as FoodCatalogLookupResult);
+    const weightRes = toolResults.find((r) => r.tool === 'getWeightProgress' && r.success)?.data as WeightProgressResult | undefined;
+    const patternsRes = toolResults.find((r) => r.tool === 'getMealPatterns' && r.success)?.data as MealPatternResult | undefined;
+    const recommendationRes = toolResults.find((r) => r.tool === 'getFoodRecommendations' && r.success)?.data as CatalogRecommendationResult | undefined;
 
     // Recommendation Intent: Provide grounded suggestions instead of repeating diary statistics
     if (context?.isRecommendation) {
-      return this.composeRecommendationResponse(dailyRes, targetsRes, context);
+      return this.composeRecommendationResponse(dailyRes, targetsRes, recommendationRes, context);
     }
 
     // Profile Intent: Return dedicated profile targets and fitness journey overview
@@ -463,6 +467,10 @@ export class CieResponseComposer {
     if (historyRes) {
       return this.composeHistoryResponse(historyRes, targetsRes);
     }
+
+    if (catalogResults.length > 0) return this.composeCatalogResponse(catalogResults);
+    if (weightRes) return this.composeWeightProgress(weightRes);
+    if (patternsRes) return this.composeMealPatterns(patternsRes);
 
     if (dailyRes) {
       return this.composeDailyResponse(dailyRes, targetsRes, context);

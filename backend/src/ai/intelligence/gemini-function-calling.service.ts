@@ -205,6 +205,7 @@ export class GeminiFunctionCallingService {
     prompt: string,
     currentDateStr: string = '2026-11-20',
     mockToolCalls?: ToolCallRequest[],
+    conversationContext?: { lastSubject?: string; lastDate?: string; lastIntent?: string },
   ): Promise<GeminiToolSelectionResult> {
     // If mock calls are provided (e.g. in test suites or deterministic mode), return them directly
     if (mockToolCalls) {
@@ -235,16 +236,24 @@ export class GeminiFunctionCallingService {
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
 
+      const contextText = conversationContext
+        ? `\nNonpersonal conversation state: last subject=${conversationContext.lastSubject || 'unknown'}, last date=${conversationContext.lastDate || 'unknown'}, last intent=${conversationContext.lastIntent || 'unknown'}. Use this only to resolve pronouns and follow-up intent.`
+        : '';
       const systemInstruction = `You are the CalTrack Nutrition Assistant.
 Current Local Date: ${currentDateStr}
+${contextText}
 You have access to read-only nutrition tools ONLY for querying authenticated user personal records:
 1. getDailyNutrition(date: string YYYY-MM-DD): ONLY for personal inquiries about what the authenticated user ate or logged, or their daily macro totals (e.g. "what did I eat today", "how much protein did I have", "my diary"). NEVER use for general food nutrition, recipes, dish calories, or ingredient inquiries (e.g. "chicken curry", "kottu and prawns stats", "banana calories").
 2. getNutritionTargets(): for questions about the user's personal calorie targets, macro goals (protein, carbs, fat), fitness goals, or profile info (e.g. "what are my goals", "tell me about myself").
-3. getFoodHistory(days: number 1-7, endDate?: string): for questions about past eating consistency or multi-day history over the last 1 to 7 days. NEVER use for future plans (e.g. "30 day plan").
+3. getFoodHistory(days: number 1-30, endDate?: string): for personal weekly or monthly summaries and past eating consistency. NEVER use for future meal plans.
+4. lookupFoods(query): for nonpersonal food or dish nutrition from the CalTrack catalog.
+5. getWeightProgress(days): only for the authenticated user's weight-history questions.
+6. getMealPatterns(days): only for the authenticated user's common-food or meal-pattern questions.
+7. getFoodRecommendations(maxCalories, proteinPriority): actual catalog suggestions for a current-day food recommendation.
 
 CRITICAL TOOL CALLING RULES:
 - If the user is asking about general food, dishes, ingredients, recipes, or nutritional facts without referring to their own personal logged diary (e.g. "chicken curry", "kottu and prawns stats", "chicken curry and rice calories"), DO NOT call any tool! Leave function calls empty and provide an educational nutrition response directly in text.
-- If the user asks for a future diet plan or multi-week / 30-day plan, DO NOT call getFoodHistory. Leave function calls empty.
+- Distinguish a 30-day historical nutrition summary (getFoodHistory with days=30) from a future 30-day meal plan (no tool).
 - Select tools ONLY when the user is explicitly inquiring about their own authenticated personal records, targets, or past logged history.`;
 
       let response: any;

@@ -17,6 +17,11 @@ import {
   GetFoodHistoryArgs,
   FoodHistoryResult,
   DailyHistoryEntry,
+  CatalogFoodResult,
+  FoodCatalogLookupResult,
+  WeightProgressResult,
+  MealPatternResult,
+  CatalogRecommendationResult,
 } from './nutrition-tools.types';
 
 @Injectable()
@@ -70,16 +75,16 @@ export class NutritionToolsService {
   }
 
   /**
-   * Validates that the history window is an integer within the allowable bounds (1 to 7 for V1).
+   * Validates that the summary window is bounded to 30 calendar days for V1.
    */
   public validateDaysLimit(days: any): number {
     const numericDays = typeof days === 'number' ? days : parseInt(days, 10);
     if (isNaN(numericDays) || !Number.isInteger(numericDays)) {
       throw new BadRequestException('days parameter must be an integer');
     }
-    if (numericDays < 1 || numericDays > 7) {
+    if (numericDays < 1 || numericDays > 30) {
       throw new BadRequestException(
-        'days must be an integer between 1 and 7 for V1 history retrieval',
+        'days must be an integer between 1 and 30 for V1 summary retrieval',
       );
     }
     return numericDays;
@@ -344,6 +349,137 @@ export class NutritionToolsService {
       avgDailyFat:
         loggedDaysCount > 0 ? Math.round((sumF / loggedDaysCount) * 10) / 10 : null,
       dailyEntries,
+    };
+  }
+
+  private toCatalogFood(food: any): CatalogFoodResult {
+    const standardUnit =
+      food.unitConversions?.find((unit: any) => unit.isStandard) || food.unitConversions?.[0];
+    const servingGrams = standardUnit?.gramEquivalent || 100;
+    const multiplier = servingGrams / 100;
+    return {
+      id: food.id,
+      name: food.name,
+      category: food.category,
+      isVerified: Boolean(food.isVerified),
+      servingDescription: standardUnit ? `1 ${standardUnit.unitName}` : '100g',
+      servingGrams: Math.round(servingGrams * 10) / 10,
+      calories: Math.round(food.caloriesKcal * multiplier),
+      protein: Math.round(food.proteinG * multiplier * 10) / 10,
+      carbs: Math.round(food.carbohydratesG * multiplier * 10) / 10,
+      fat: Math.round(food.fatG * multiplier * 10) / 10,
+    };
+  }
+
+  /** Public food-catalog data. Authentication is still required by the dispatcher for a uniform boundary. */
+  async lookupFoods(userId: string, args: { query: string; limit?: number }): Promise<FoodCatalogLookupResult> {
+    this.validateUserId(userId);
+    const query = typeof args?.query === 'string' ? args.query.trim() : '';
+    if (!query || query.length > 120) {
+      throw new BadRequestException('query must be between 1 and 120 characters');
+    }
+    const limit = Math.min(Math.max(Number(args?.limit) || 5, 1), 8);
+    const foods = await this.prisma.food.findMany({
+      where: {
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { aliases: { some: { aliasName: { contains: query, mode: 'insensitive' } } } },
+        ],
+      },
+      include: { unitConversions: true },
+      orderBy: [{ isVerified: 'desc' }, { name: 'asc' }],
+      take: limit,
+    });
+    return { query, foods: foods.map((food) => this.toCatalogFood(food)) };
+  }
+
+  async getWeightProgress(userId: string, args: { days?: number }): Promise<WeightProgressResult> {
+    this.validateUserId(userId);
+    const days = Math.min(Math.max(Number(args?.days) || 90, 1), 365);
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - days + 1);
+    const entries = await this.prisma.weightEntry.findMany({
+      where: { userId, recordedAt: { gte: since } },
+      select: { recordedAt: true, weightKg: true },
+      orderBy: { recordedAt: 'asc' },
+      take: 366,
+    });
+    const first = entries[0]?.weightKg ?? null;
+    const latest = entries[entries.length - 1]?.weightKg ?? null;
+    return {
+      days,
+      entries: entries.map((entry) => ({ recordedAt: entry.recordedAt.toISOString(), weightKg: entry.weightKg })),
+      firstWeightKg: first,
+      latestWeightKg: latest,
+      changeKg: first !== null && latest !== null ? Math.round((latest - first) * 10) / 10 : null,
+    };
+  }
+
+  async getMealPatterns(userId: string, args: { days?: number }): Promise<MealPatternResult> {
+    this.validateUserId(userId);
+    const days = Math.min(Math.max(Number(args?.days) || 30, 1), 30);
+    const endDate = parseLocalDate(getLocalDateString());
+    const startDate = new Date(endDate);
+    startDate.setUTCDate(startDate.getUTCDate() - days + 1);
+    const logs = await this.prisma.mealLog.findMany({
+      where: { userId, date: { gte: startDate, lte: endDate } },
+      include: { entries: { include: { food: true } } },
+      orderBy: { date: 'asc' },
+    });
+    const foodCounts = new Map<string, number>();
+    const slotCounts = new Map<string, number>();
+    let loggedDaysCount = 0;
+    for (const log of logs) {
+      if (log.entries.length > 0) loggedDaysCount++;
+      for (const entry of log.entries) {
+        const name = this.diarySummaryService.extractFoodName(entry);
+        foodCounts.set(name, (foodCounts.get(name) || 0) + 1);
+        const slot = String(entry.meal);
+        slotCounts.set(slot, (slotCounts.get(slot) || 0) + 1);
+      }
+    }
+    const descending = (a: [string, number], b: [string, number]) => b[1] - a[1] || a[0].localeCompare(b[0]);
+    return {
+      days,
+      loggedDaysCount,
+      commonFoods: Array.from(foodCounts.entries()).sort(descending).slice(0, 8).map(([name, occurrences]) => ({ name, occurrences })),
+      mealSlotCounts: Array.from(slotCounts.entries()).sort(descending).map(([slot, entries]) => ({ slot, entries })),
+    };
+  }
+
+  async getFoodRecommendations(
+    userId: string,
+    args: { maxCalories?: number; proteinPriority?: boolean; limit?: number },
+  ): Promise<CatalogRecommendationResult> {
+    this.validateUserId(userId);
+    const maxCaloriesRaw = Number(args?.maxCalories);
+    const maxCalories = Number.isFinite(maxCaloriesRaw) && maxCaloriesRaw > 0 ? Math.min(maxCaloriesRaw, 2500) : null;
+    const proteinPriority = Boolean(args?.proteinPriority);
+    const limit = Math.min(Math.max(Number(args?.limit) || 4, 1), 6);
+    const foods = await this.prisma.food.findMany({
+      where: { regionId: 'LK' },
+      include: { unitConversions: true },
+      orderBy: [{ isVerified: 'desc' }, { name: 'asc' }],
+      take: 150,
+    });
+    const candidates = foods
+      .map((food) => this.toCatalogFood(food))
+      .filter((food) => food.calories > 0 && (!maxCalories || food.calories <= maxCalories))
+      .sort((a, b) => {
+        if (a.isVerified !== b.isVerified) return a.isVerified ? -1 : 1;
+        if (proteinPriority) {
+          const aDensity = a.protein / Math.max(a.calories, 1);
+          const bDensity = b.protein / Math.max(b.calories, 1);
+          if (aDensity !== bDensity) return bDensity - aDensity;
+        }
+        return a.calories - b.calories;
+      })
+      .slice(0, limit);
+    return {
+      maxCalories,
+      proteinPriority,
+      foods: candidates,
+      basis: candidates.length > 0 && candidates.every((food) => food.isVerified) ? 'verified_catalog' : 'catalog',
     };
   }
 }

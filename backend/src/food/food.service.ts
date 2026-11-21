@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { getSharedMiniLmPipeline } from '../common/local-embedding';
 
 function levenshteinDistance(a: string, b: string): number {
   const m = a.length;
@@ -35,8 +36,7 @@ export class FoodService implements OnModuleInit {
   async onModuleInit() {
     this.logger.log('Loading AI embedding model for semantic search...');
     // Dynamic import to avoid CommonJS/Jest top-level ESM module parsing conflicts
-    const { pipeline } = await import('@xenova/transformers');
-    this.generateEmbedding = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    this.generateEmbedding = await getSharedMiniLmPipeline();
     this.logger.log('AI embedding model loaded successfully!');
   }
 

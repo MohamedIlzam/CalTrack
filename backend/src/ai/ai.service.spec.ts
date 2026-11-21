@@ -374,6 +374,31 @@ describe('AiService', () => {
         service.validateFoodSuggestionOutput(invalidNutrients, 'Ghost Pepper'),
       ).toThrow('AI nutrient values must be valid finite numbers');
     });
+
+    it('rejects calories that are materially inconsistent with the returned macronutrients', () => {
+      expect(() => service.validateFoodSuggestionOutput({
+        name: 'Impossible Puttu',
+        portionDescription: '1 plate',
+        kcalPerServing: 150,
+        proteinPerServing: 40,
+        carbsPerServing: 80,
+        fatPerServing: 30,
+      }, 'puttu with beef')).toThrow('inconsistent with the supplied macronutrients');
+    });
+
+    it('records an explicit full-serving default and estimate origin', () => {
+      const result = service.validateFoodSuggestionOutput({
+        name: 'Puttu with Beef',
+        portionDescription: '1 plate (250g)',
+        kcalPerServing: 550,
+        proteinPerServing: 28,
+        carbsPerServing: 62,
+        fatPerServing: 21,
+      }, 'puttu with beef');
+      expect(result.suggestedQuantity).toBe(1);
+      expect(result.sourceKind).toBe('gemini_estimate');
+      expect(result.portionDescription).toBe('1 plate (250g)');
+    });
   });
 
   describe('isTransientGeminiError', () => {

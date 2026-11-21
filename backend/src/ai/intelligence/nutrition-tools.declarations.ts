@@ -36,14 +36,14 @@ export const NUTRITION_TOOL_DECLARATIONS = [
   {
     name: 'getFoodHistory',
     description:
-      'Retrieves multi-day historical food logs, daily totals, distinct food names eaten, and daily averages over a recent period (between 1 and 7 days). Call this when the user asks about their weekly intake, eating consistency, or recent multi-day meal trends.',
+      'Retrieves bounded historical food logs, daily totals, food names, logging consistency, and averages for 1 to 30 days. Use 7 for weekly and 30 for monthly personal summaries.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         days: {
           type: Type.INTEGER,
           description:
-            'The number of days to inspect historically (must be an integer between 1 and 7).',
+            'The number of days to inspect historically (must be an integer between 1 and 30).',
         },
         endDate: {
           type: Type.STRING,
@@ -52,6 +52,46 @@ export const NUTRITION_TOOL_DECLARATIONS = [
         },
       },
       required: ['days'],
+    },
+  },
+  {
+    name: 'lookupFoods',
+    description: 'Looks up factual serving nutrition from the CalTrack food catalog for named foods or dishes. Use for general food macro comparisons and food facts; it does not access diary records.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        query: { type: Type.STRING, description: 'Concise food or dish name, without conversational filler.' },
+        limit: { type: Type.INTEGER, description: 'Maximum results from 1 to 8.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'getWeightProgress',
+    description: 'Retrieves the authenticated user weight trend over a bounded number of days.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: { days: { type: Type.INTEGER, description: 'Window from 1 to 365 days.' } },
+    },
+  },
+  {
+    name: 'getMealPatterns',
+    description: 'Retrieves the authenticated user commonly logged foods and meal-slot frequencies for up to 30 days.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: { days: { type: Type.INTEGER, description: 'Window from 1 to 30 days.' } },
+    },
+  },
+  {
+    name: 'getFoodRecommendations',
+    description: 'Returns bounded Sri Lankan food suggestions from actual CalTrack catalog rows, optionally constrained by a calorie budget and protein priority.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        maxCalories: { type: Type.NUMBER, description: 'Maximum calories for one catalog serving.' },
+        proteinPriority: { type: Type.BOOLEAN, description: 'Prefer foods with higher protein density.' },
+        limit: { type: Type.INTEGER, description: 'Maximum suggestions from 1 to 6.' },
+      },
     },
   },
 ];

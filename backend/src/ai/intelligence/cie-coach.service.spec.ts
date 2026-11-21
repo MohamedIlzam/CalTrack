@@ -7,6 +7,7 @@ import { RedisService } from '../../redis/redis.service';
 import { AiController } from '../ai.controller';
 import { AiService } from '../ai.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NutritionRagService } from './rag/nutrition-rag.service';
 import {
   DailyNutritionResult,
   NutritionTargetsResult,
@@ -19,6 +20,8 @@ describe('CieCoachService & CIE Coach Integration', () => {
   let mockToolDispatcher: any;
   let mockDiarySummaryService: any;
   let mockRedisService: any;
+  let mockNutritionRagService: any;
+  let mockAiService: any;
 
   const mockUserId = 'user-auth-123';
   const testDateStr = '2026-11-20';
@@ -42,6 +45,14 @@ describe('CieCoachService & CIE Coach Integration', () => {
       set: jest.fn().mockResolvedValue(undefined),
       checkRateLimit: jest.fn().mockResolvedValue({ allowed: true, remaining: 14, current: 1 }),
     };
+    mockNutritionRagService = {
+      searchNutritionKnowledge: jest.fn().mockResolvedValue([]),
+      formatRagContext: jest.fn().mockReturnValue('bounded evidence context'),
+    };
+    mockAiService = {
+      askCoach: jest.fn().mockResolvedValue({ reply: 'Generic nonpersonal answer', provenance: { source: 'gemini', label: 'Gemini AI' } }),
+      askGroundedNutritionQuestion: jest.fn().mockResolvedValue('Protein supports muscle repair after training.\n\nSources: ISSN'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -50,6 +61,8 @@ describe('CieCoachService & CIE Coach Integration', () => {
         { provide: ToolDispatcherService, useValue: mockToolDispatcher },
         { provide: DiarySummaryService, useValue: mockDiarySummaryService },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: NutritionRagService, useValue: mockNutritionRagService },
+        { provide: AiService, useValue: mockAiService },
       ],
     }).compile();
 
@@ -97,7 +110,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
     expect(mockToolDispatcher.dispatchBatch).toHaveBeenCalledWith(
       mockUserId,
       expect.arrayContaining([
-        expect.objectContaining({ name: 'getDailyNutrition', callId: 'call-1' }),
+        expect.objectContaining({ name: 'getDailyNutrition', args: { date: testDateStr } }),
       ]),
     );
   });
@@ -152,7 +165,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
 
     const result = await service.handleCoachMessage(
       mockUserId,
-      'How much protein have I eaten today?',
+      'Can you review my records?',
       testDateStr,
       testTimeZone,
     );
@@ -540,7 +553,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
 
     const result = await service.handleCoachMessage(
       mockUserId,
-      'How much protein have I eaten today?',
+      'Can you review my records?',
       testDateStr,
       testTimeZone,
     );
@@ -553,13 +566,13 @@ describe('CieCoachService & CIE Coach Integration', () => {
     mockDiarySummaryService.tryHandleCoachDiaryIntent.mockResolvedValue(null);
     const safeDegradationResult = await service.handleCoachMessage(
       mockUserId,
-      'Complex query that failed',
+      'Can you review my records again?',
       testDateStr,
       testTimeZone,
     );
 
     expect(safeDegradationResult).toBeDefined();
-    expect(safeDegradationResult!.reply).toContain('temporarily experiencing high demand');
+    expect(safeDegradationResult!.reply).toContain('need a little more detail');
   });
 
   // --------------------------------------------------------------------------
@@ -737,15 +750,9 @@ describe('CieCoachService & CIE Coach Integration', () => {
       testTimeZone,
     );
 
-    // Verify selectTools was called ONLY with prompt text and date, never diary records
-    expect(mockGeminiFunctionCalling.selectTools).toHaveBeenCalledTimes(1);
-    expect(mockGeminiFunctionCalling.selectTools).toHaveBeenCalledWith(
-      'What did I eat today?',
-      testDateStr,
-    );
-    // Real data was never passed to Gemini SDK
-    const geminiArgs = mockGeminiFunctionCalling.selectTools.mock.calls[0];
-    expect(JSON.stringify(geminiArgs)).not.toContain(sensitiveMealName);
+    // Obvious diary questions are routed locally, so no prompt or record reaches Gemini.
+    expect(mockGeminiFunctionCalling.selectTools).not.toHaveBeenCalled();
+    expect(JSON.stringify(mockGeminiFunctionCalling.selectTools.mock.calls)).not.toContain(sensitiveMealName);
   });
 
   // --------------------------------------------------------------------------
@@ -831,7 +838,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
       functionCalls: [{ name: 'getDailyNutrition', args: { date: 'today' }, callId: 'f1' }],
     });
 
-    mockToolDispatcher.dispatchBatch.mockResolvedValue([
+    mockToolDispatcher.dispatchBatch.mockResolvedValueOnce([
       {
         tool: 'getDailyNutrition',
         callId: 'f1',
@@ -844,6 +851,20 @@ describe('CieCoachService & CIE Coach Integration', () => {
           totalFat: 15,
           meals: [],
           isLogged: true,
+        },
+      },
+    ]).mockResolvedValueOnce([
+      {
+        tool: 'getFoodRecommendations',
+        success: true,
+        data: {
+          maxCalories: 1826,
+          proteinPriority: true,
+          basis: 'verified_catalog',
+          foods: [
+            { id: 'chicken', name: 'Chicken Curry', category: 'Curries', isVerified: true, servingDescription: '1 piece', servingGrams: 120, calories: 220, protein: 24, carbs: 4, fat: 12 },
+            { id: 'fish', name: 'Fish Ambul Thiyal', category: 'Curries', isVerified: true, servingDescription: '1 piece', servingGrams: 50, calories: 80, protein: 12, carbs: 2, fat: 2 },
+          ],
         },
       },
     ]);
@@ -888,7 +909,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
       ],
     });
 
-    mockToolDispatcher.dispatchBatch.mockResolvedValue([
+    mockToolDispatcher.dispatchBatch.mockResolvedValueOnce([
       {
         tool: 'getDailyNutrition',
         callId: 'c1',
@@ -923,6 +944,22 @@ describe('CieCoachService & CIE Coach Integration', () => {
       },
     ]);
 
+    mockToolDispatcher.dispatchBatch.mockResolvedValueOnce([
+      {
+        tool: 'getFoodRecommendations',
+        success: true,
+        data: {
+          maxCalories: 1826,
+          proteinPriority: true,
+          basis: 'verified_catalog',
+          foods: [
+            { id: 'chicken', name: 'Chicken Curry', category: 'Curries', isVerified: true, servingDescription: '1 piece', servingGrams: 120, calories: 220, protein: 24, carbs: 4, fat: 12 },
+            { id: 'fish', name: 'Fish Ambul Thiyal', category: 'Curries', isVerified: true, servingDescription: '1 piece', servingGrams: 50, calories: 80, protein: 12, carbs: 2, fat: 2 },
+          ],
+        },
+      },
+    ]);
+
     const res = await service.handleCoachMessage(
       mockUserId,
       'What should I eat today?',
@@ -934,7 +971,6 @@ describe('CieCoachService & CIE Coach Integration', () => {
     // Must contain grounded recommendations from CalTrack database
     expect(res!.reply).toContain('Chicken Curry');
     expect(res!.reply).toContain('Fish Ambul Thiyal');
-    expect(res!.reply).toContain('Dhal Curry');
     // Must state remaining macros based on actual saved 2126 target
     expect(res!.reply).toContain('1,826 kcal remaining');
     expect(res!.reply).toContain('127g protein to reach goal');
@@ -954,7 +990,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
       ],
     });
 
-    mockToolDispatcher.dispatchBatch.mockResolvedValue([
+    mockToolDispatcher.dispatchBatch.mockResolvedValueOnce([
       {
         tool: 'getDailyNutrition',
         callId: 'c_auto',
@@ -981,6 +1017,31 @@ describe('CieCoachService & CIE Coach Integration', () => {
           goal: 'GAIN',
         },
       },
+    ]).mockResolvedValueOnce([
+      {
+        tool: 'getFoodRecommendations',
+        success: true,
+        data: {
+          maxCalories: 1826,
+          proteinPriority: true,
+          basis: 'verified_catalog',
+          foods: [{ id: 'chicken', name: 'Chicken Curry', category: 'Curries', isVerified: true, servingDescription: '1 piece', servingGrams: 120, calories: 220, protein: 24, carbs: 4, fat: 12 }],
+        },
+      },
+    ]).mockResolvedValueOnce([
+      {
+        tool: 'getFoodRecommendations',
+        success: true,
+        data: {
+          maxCalories: 1826,
+          proteinPriority: true,
+          basis: 'verified_catalog',
+          foods: [
+            { id: 'chicken', name: 'Chicken Curry', category: 'Curries', isVerified: true, servingDescription: '1 piece', servingGrams: 120, calories: 220, protein: 24, carbs: 4, fat: 12 },
+            { id: 'fish', name: 'Fish Ambul Thiyal', category: 'Curries', isVerified: true, servingDescription: '1 piece', servingGrams: 50, calories: 80, protein: 12, carbs: 2, fat: 2 },
+          ],
+        },
+      },
     ]);
 
     const res = await service.handleCoachMessage(
@@ -991,7 +1052,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
     );
 
     expect(res).not.toBeNull();
-    expect(res!.reply).toContain('Recommended Dishes from CalTrack Database');
+    expect(res!.reply).toContain('Suggestions from the CalTrack food catalog');
     expect(res!.reply).toContain('Chicken Curry');
     expect(res!.reply).not.toContain('You haven\'t configured your nutrition targets yet');
   });
@@ -1008,8 +1069,8 @@ describe('CieCoachService & CIE Coach Integration', () => {
     );
 
     expect(res).not.toBeNull();
-    expect(res!.reply).toContain('30-day meal planning is deferred to CalTrack Intelligence Engine V2');
-    expect(res!.reply).toContain('CalTrack V1 specializes in real-time daily nutrition tracking');
+    expect(res!.reply).toContain('does not generate an automated 30-day meal plan');
+    expect(res!.reply).toContain('monthly nutrition summary');
     expect(res!.provenance).toEqual(
       expect.objectContaining({
         source: 'caltrack_local',
@@ -1065,15 +1126,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
   // Test 21: Inappropriate Gemini tool selection guard ("chicken curry")
   // --------------------------------------------------------------------------
   it('21. should filter out getDailyNutrition for general food query lacking personal intent ("chicken curry")', async () => {
-    // Simulate Gemini erroneously selecting getDailyNutrition for "chicken curry"
-    mockGeminiFunctionCalling.selectTools.mockResolvedValue({
-      prompt: 'chicken curry',
-      hasFunctionCalls: true,
-      functionCalls: [
-        { name: 'getDailyNutrition', args: { date: 'today' }, callId: 'err-tool' },
-      ],
-      modelUsed: 'gemini-3.5-flash-lite',
-    });
+    mockToolDispatcher.dispatchBatch.mockResolvedValue([{ tool: 'lookupFoods', success: true, data: { query: 'chicken curry', foods: [] } }]);
 
     const res = await service.handleCoachMessage(
       mockUserId,
@@ -1082,10 +1135,9 @@ describe('CieCoachService & CIE Coach Integration', () => {
       testTimeZone,
     );
 
-    // Filtered out getDailyNutrition -> returned null to fall through to standard Gemini food coach
-    expect(res).toBeNull();
-    // Verified dispatcher was NOT called with getDailyNutrition
-    expect(mockToolDispatcher.dispatchBatch).not.toHaveBeenCalled();
+    expect(res).not.toBeNull();
+    expect(mockGeminiFunctionCalling.selectTools).not.toHaveBeenCalled();
+    expect(mockToolDispatcher.dispatchBatch).toHaveBeenCalledWith(mockUserId, [expect.objectContaining({ name: 'lookupFoods' })]);
   });
 
   // --------------------------------------------------------------------------
@@ -1161,7 +1213,7 @@ describe('CieCoachService & CIE Coach Integration', () => {
 
     const res = await service.handleCoachMessage(
       mockUserId,
-      'what did I eat today',
+      'Can you review my records?',
       testDateStr,
       testTimeZone,
     );
@@ -1174,5 +1226,50 @@ describe('CieCoachService & CIE Coach Integration', () => {
         label: 'Local Fallback',
       }),
     );
+  });
+
+  it('24. resolves an ambiguous remaining-protein follow-up from bounded local conversation state', async () => {
+    const daily = {
+      date: testDateStr,
+      isLogged: true,
+      totalCalories: 400,
+      totalProtein: 10,
+      totalCarbs: 50,
+      totalFat: 12,
+      meals: [{ slot: 'Breakfast', slotCalories: 400, items: [{ name: 'Puttu', serving: '1 serving', calories: 400, protein: 10, carbs: 50, fat: 12 }] }],
+    };
+    mockToolDispatcher.dispatchBatch.mockImplementation(async (_userId: string, calls: any[]) => {
+      const results: any[] = [];
+      if (calls.some((call) => call.name === 'getDailyNutrition')) results.push({ tool: 'getDailyNutrition', success: true, data: daily });
+      if (calls.some((call) => call.name === 'getNutritionTargets')) results.push({ tool: 'getNutritionTargets', success: true, data: { targetCalories: 2000, targetProteinG: 133, targetCarbsG: 220, targetFatG: 60, goal: 'GAIN' } });
+      return results;
+    });
+
+    await service.handleCoachMessage(mockUserId, 'How much protein did I eat today?', testDateStr, testTimeZone);
+    const followUp = await service.handleCoachMessage(mockUserId, 'How much more do I need?', testDateStr, testTimeZone);
+
+    expect(followUp!.reply).toContain('123g more protein');
+    expect(mockGeminiFunctionCalling.selectTools).not.toHaveBeenCalled();
+  });
+
+  it('25. distinguishes a monthly historical summary from a future 30-day meal plan', async () => {
+    mockToolDispatcher.dispatchBatch.mockResolvedValue([
+      { tool: 'getFoodHistory', success: true, data: { startDate: '2026-10-22', endDate: testDateStr, daysRequested: 30, loggedDaysCount: 0, unloggedDaysCount: 30, avgDailyCalories: null, avgDailyProtein: null, avgDailyCarbs: null, avgDailyFat: null, dailyEntries: [] } },
+      { tool: 'getNutritionTargets', success: true, data: { targetCalories: 2000, targetProteinG: 120 } },
+    ]);
+    const summary = await service.handleCoachMessage(mockUserId, 'Show my monthly nutrition summary', testDateStr, testTimeZone);
+    expect(summary!.reply).toContain('30-day nutrition history');
+    expect(mockToolDispatcher.dispatchBatch).toHaveBeenCalledWith(mockUserId, expect.arrayContaining([expect.objectContaining({ name: 'getFoodHistory', args: expect.objectContaining({ days: 30 }) })]));
+
+    const plan = await service.handleCoachMessage(mockUserId, 'My 30-day meal plan', testDateStr, testTimeZone);
+    expect(plan!.reply).toContain('does not generate an automated 30-day meal plan');
+  });
+
+  it('26. uses retrieved evidence in a nonpersonal RAG answer and exposes citations', async () => {
+    mockNutritionRagService.searchNutritionKnowledge.mockResolvedValue([{ id: 'k1', topic: 'protein', title: 'Protein and recovery', content: 'Protein supports repair.', sourceTitle: 'ISSN Position Stand', sourceUrl: 'https://example.test/issn', provenance: 'ISSN', distance: 0.2, similarity: 0.8 }]);
+    const result = await service.handleCoachMessage(mockUserId, 'What does protein do for muscle recovery?', testDateStr, testTimeZone);
+    expect(mockAiService.askGroundedNutritionQuestion).toHaveBeenCalledWith(expect.any(String), 'bounded evidence context');
+    expect(result!.provenance.source).toBe('rag');
+    expect(result!.provenance.citations).toEqual([expect.objectContaining({ title: 'ISSN Position Stand' })]);
   });
 });

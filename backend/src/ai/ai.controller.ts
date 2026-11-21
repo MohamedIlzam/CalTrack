@@ -79,6 +79,20 @@ export class AiController {
     const userId = req.user.id;
     await this.enforceRateLimit(userId);
 
+    // Apply the privacy boundary before every possible external-model route, including
+    // the legacy/CIE-disabled fallback. Rejected prompts must never fall through to Gemini.
+    if (this.cieCoachService && !this.cieCoachService.isPrivacySafePrompt(trimmed)) {
+      return {
+        reply: 'I cannot process prompts containing credentials or sensitive account information. Remove that information and ask the nutrition question again.',
+        provenance: {
+          source: 'caltrack_local',
+          label: 'CalTrack Local',
+          details: 'Privacy boundary filter',
+          responseAuthor: 'caltrack_local',
+        },
+      };
+    }
+
     // Feature Flag & CIE Routing:
     // When CIE_ENABLED=true, route message through CalTrack Intelligence Engine.
     // If handled, return authoritative response without transmitting user diary data to external LLMs.

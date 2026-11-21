@@ -10,6 +10,10 @@ export const ALLOWED_TOOL_NAMES = [
   'getDailyNutrition',
   'getNutritionTargets',
   'getFoodHistory',
+  'lookupFoods',
+  'getWeightProgress',
+  'getMealPatterns',
+  'getFoodRecommendations',
 ] as const;
 
 export type AllowedToolName = (typeof ALLOWED_TOOL_NAMES)[number];
@@ -124,6 +128,29 @@ export class ToolDispatcherService {
           data = await this.nutritionToolsService.getFoodHistory(authenticatedUserId, {
             days: cleanArgs.days,
             endDate: cleanArgs.endDate,
+          });
+          break;
+        }
+        case 'lookupFoods': {
+          data = await this.nutritionToolsService.lookupFoods(authenticatedUserId, {
+            query: cleanArgs.query,
+            limit: cleanArgs.limit,
+          });
+          break;
+        }
+        case 'getWeightProgress': {
+          data = await this.nutritionToolsService.getWeightProgress(authenticatedUserId, { days: cleanArgs.days });
+          break;
+        }
+        case 'getMealPatterns': {
+          data = await this.nutritionToolsService.getMealPatterns(authenticatedUserId, { days: cleanArgs.days });
+          break;
+        }
+        case 'getFoodRecommendations': {
+          data = await this.nutritionToolsService.getFoodRecommendations(authenticatedUserId, {
+            maxCalories: cleanArgs.maxCalories,
+            proteinPriority: cleanArgs.proteinPriority,
+            limit: cleanArgs.limit,
           });
           break;
         }

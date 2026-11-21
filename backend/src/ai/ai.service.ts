@@ -25,6 +25,11 @@ export interface FoodSuggestion {
   chipColor: string;
   category: string;
   portionDescription?: string;
+  servingGrams?: number;
+  confidence?: 'low' | 'medium' | 'high';
+  assumptions?: string[];
+  suggestedQuantity: number;
+  sourceKind: 'gemini_estimate';
   isEstimate: boolean;
 }
 
@@ -200,8 +205,8 @@ export class AiService {
         : '';
 
       const systemInstruction = `You are the CalTrack AI Nutrition & Fitness Coach, an empathetic, highly knowledgeable coach specializing in macronutrients, energy balance, and global/South Asian/Sri Lankan dietary habits.
-Mode: Synthetic Demonstration Mode (unpaid Gemini tier).
-Privacy Boundary: This service operates in a strict zero-real-PII synthetic mode. No real user health, medical, diary, or personal account records are processed.${demoArchetypeText}
+Mode: Privacy-preserving general nutrition guidance.
+Privacy Boundary: No authenticated diary, health, weight, profile, or account records are included in this request.${demoArchetypeText}
 
 Security & Response Directives:
 - Answer nutritional inquiries objectively, educationally, and with actionable evidence-based guidance.
@@ -269,6 +274,30 @@ Security & Response Directives:
     }
   }
 
+  async askGroundedNutritionQuestion(prompt: string, evidenceContext: string): Promise<string> {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new ServiceUnavailableException('Grounded AI generation is not configured.');
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = `You are CalTrack's evidence-grounded nutrition educator.
+Use only the supplied reference context for factual nutrition claims. The context contains no personal user records.
+Answer the nonpersonal question in concise, plain language. Do not diagnose or prescribe treatment.
+End with a short Sources section using the exact source titles and URLs present in the reference context.
+If the context does not answer the question, say so rather than inventing an answer.\n\n${evidenceContext}`;
+    const response = await this.callWithTimeout(
+      ai.models.generateContent({
+        model: this.modelName,
+        contents: prompt,
+        config: { systemInstruction, maxOutputTokens: 650, temperature: 0.25 },
+      }),
+      8500,
+      'Grounded nutrition response timed out after 8.5s',
+    );
+    const text = response.text?.trim();
+    if (!text) throw new Error('Grounded model response was empty');
+    return text;
+  }
+
   async parsePrompt(prompt: string): Promise<ParsePromptResult> {
     // 1. Fast path for greetings and chatter: zero API quota used, instant response
     if (this.isPureGreeting(prompt)) {
@@ -294,11 +323,13 @@ Security & Response Directives:
       const ai = new GoogleGenAI({ apiKey });
 
       const systemInstruction = `You are CalTrack AI, an expert food and nutrition assistant specialized in global and South Asian / Sri Lankan cuisine.
-Operate in Synthetic Demonstration Mode.
+Operate in clearly labelled nutrition-estimate mode; do not imply that generated values are verified catalog data.
 Analyze the user's input:
 1. If the input describes an identifiable food, dish, meal, recipe, or beverage (including conversational requests like "can you estimate 2 eggs" or "chicken fried rice"):
    - Set isFood: true
-   - Provide the canonical food name, portionDescription, sensible estimated nutrients per single serving (kcalPerServing, proteinPerServing, carbsPerServing, fatPerServing), single emoji, and category ("Rice & Bread", "Curries", "Sides", "Extras", or "Custom").
+   - Provide the canonical food name, an explicit portionDescription, servingGrams when reasonably estimable, and nutrients for exactly that stated serving (kcalPerServing, proteinPerServing, carbsPerServing, fatPerServing).
+   - Respect explicit quantities (for example, "2 eggs" means the serving is 2 eggs). For composite dishes, state the assumed components/preparation in assumptions.
+   - Set confidence to low, medium, or high. Use low when quantity or preparation is materially ambiguous.
    - Provide a helpful message in the message field.
 2. If the input is NOT a food, meal, recipe, or beverage (e.g. greetings, jokes, random text, questions, or non-food topics):
    - Set isFood: false
@@ -318,6 +349,9 @@ Always provide numerical estimates for kcalPerServing, proteinPerServing, carbsP
             message: { type: Type.STRING, description: 'Helpful explanation or guidance for the user' },
             name: { type: Type.STRING, description: 'Canonical food or dish name if isFood is true' },
             portionDescription: { type: Type.STRING, description: 'Sensible portion description, e.g. 1 plate, 1 cup, 1 piece' },
+            servingGrams: { type: Type.NUMBER, description: 'Estimated grams in the stated serving when reasonably known' },
+            confidence: { type: Type.STRING, description: 'low, medium, or high confidence in the estimate' },
+            assumptions: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Short preparation and portion assumptions' },
             kcalPerServing: { type: Type.NUMBER, description: 'Estimated calories in kcal per typical serving' },
             proteinPerServing: { type: Type.NUMBER, description: 'Estimated protein in grams' },
             carbsPerServing: { type: Type.NUMBER, description: 'Estimated carbohydrates in grams' },
@@ -407,9 +441,20 @@ Always provide numerical estimates for kcalPerServing, proteinPerServing, carbsP
         );
       }
 
+      const confidence = ['low', 'medium', 'high'].includes(parsed.confidence) ? parsed.confidence : 'low';
+      const assumptions = Array.isArray(parsed.assumptions)
+        ? parsed.assumptions.filter((item: any) => typeof item === 'string' && item.trim()).slice(0, 4).map((item: string) => item.trim().slice(0, 140))
+        : [];
+      const servingGramsValue = this.parseNutrientValue(parsed.servingGrams);
+
       return {
         text: `AI Nutritional Estimate (approximate): **${food.name}** (~${food.kcalPerServing} kcal, ${food.proteinPerServing}g P, ${food.carbsPerServing}g C, ${food.fatPerServing}g F per ${food.portionDescription || 'serving'}). Tap "Add to Plate" to include it! Note: Values are approximate AI estimates, not independently verified.`,
-        suggestedFood: food,
+        suggestedFood: {
+          ...food,
+          confidence,
+          assumptions,
+          servingGrams: Number.isFinite(servingGramsValue) && servingGramsValue > 0 ? Math.round(servingGramsValue) : undefined,
+        },
         provenance: {
           source: 'gemini',
           label: 'Gemini AI',
@@ -443,7 +488,7 @@ Always provide numerical estimates for kcalPerServing, proteinPerServing, carbsP
       const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
       const systemInstruction = `You are CalTrack AI vision nutrition estimator.
-Analyze this meal photo in Synthetic Demonstration Mode. Identify the primary dish or composite meal and estimate nutrition per single serving.
+Analyze this meal photo as an explicitly approximate estimate. Identify the primary dish or composite meal and estimate nutrition per single serving.
 Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or "Custom".`;
 
       const requestConfig = {
@@ -574,6 +619,16 @@ Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or
       throw new Error('Estimated macronutrient grams out of realistic range (0-500g)');
     }
 
+    // A broad range check is insufficient: require calories to be reasonably consistent
+    // with energy-bearing macronutrients (allowing label rounding, fiber, and recipe variation).
+    const macroEnergy = protein * 4 + carbs * 4 + fat * 9;
+    const energyTolerance = Math.max(80, kcal * 0.25);
+    if (kcal > 0 && Math.abs(kcal - macroEnergy) > energyTolerance) {
+      throw new Error(
+        `Estimated calories are inconsistent with the supplied macronutrients (${Math.round(macroEnergy)} kcal from macros)`,
+      );
+    }
+
     // 3. Category validation
     const validCategories = ['Rice & Bread', 'Curries', 'Sides', 'Extras'];
     const category = validCategories.includes(parsed.category) ? parsed.category : 'Custom';
@@ -599,6 +654,8 @@ Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or
       chipColor: '#006B5F',
       category,
       portionDescription,
+      suggestedQuantity: 1,
+      sourceKind: 'gemini_estimate',
       isEstimate: true,
     };
   }
@@ -620,45 +677,4 @@ Categorize into exactly one of: "Rice & Bread", "Curries", "Sides", "Extras", or
     return '🍽️';
   }
 
-  // Deterministic rule-based estimator (available for explicit offline approximation only)
-  public generateFoodFromDescription(desc: string): FoodSuggestion {
-    const lower = desc.toLowerCase();
-    let name = desc.trim();
-    name = name.charAt(0).toUpperCase() + name.slice(1);
-
-    let kcal = 220;
-    let protein = 8;
-    let carbs = 32;
-    let fat = 6;
-    let category = 'Custom';
-
-    if (/roti|paratha|bread|chapati/.test(lower)) {
-      kcal = 210; protein = 5; carbs = 36; fat = 5; category = 'Rice & Bread';
-    } else if (/rice|bath|kiribath|biryani|fried rice/.test(lower)) {
-      kcal = 280; protein = 6; carbs = 58; fat = 3; category = 'Rice & Bread';
-    } else if (/curry|dhal|parippu|korma/.test(lower)) {
-      kcal = 180; protein = 9; carbs = 18; fat = 8; category = 'Curries';
-    } else if (/chicken|beef|mutton|pork/.test(lower)) {
-      kcal = 240; protein = 26; carbs = 2; fat = 14; category = 'Curries';
-    } else if (/fish|seafood|prawn|squid/.test(lower)) {
-      kcal = 190; protein = 22; carbs = 2; fat = 9; category = 'Curries';
-    } else if (/sambol|mallung|salad|vegetable/.test(lower)) {
-      kcal = 95; protein = 2; carbs = 10; fat = 5; category = 'Sides';
-    } else if (/tea|coffee|shake|smoothie|juice/.test(lower)) {
-      kcal = 120; protein = 3; carbs = 22; fat = 2; category = 'Extras';
-    }
-
-    return {
-      id: `ai-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      name,
-      kcalPerServing: kcal,
-      proteinPerServing: protein,
-      carbsPerServing: carbs,
-      fatPerServing: fat,
-      emoji: this.getFoodEmoji(lower),
-      chipColor: '#006B5F',
-      category,
-      isEstimate: true,
-    };
-  }
 }
