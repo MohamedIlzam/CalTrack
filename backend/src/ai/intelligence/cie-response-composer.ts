@@ -51,8 +51,7 @@ export class CieResponseComposer {
       const targetLines: string[] = [];
       if (targets && targets.targetCalories) {
         targetLines.push(
-          `For reference, your daily target is **${targets.targetCalories.toLocaleString()} kcal**${
-            targets.targetProteinG ? ` with **${targets.targetProteinG}g protein**` : ''
+          `For reference, your daily target is **${targets.targetCalories.toLocaleString()} kcal**${targets.targetProteinG ? ` with **${targets.targetProteinG}g protein**` : ''
           }.`,
         );
       }
@@ -170,8 +169,8 @@ export class CieResponseComposer {
         targets.goal === 'LOSE'
           ? 'Weight Loss (LOSE)'
           : targets.goal === 'GAIN'
-          ? 'Weight / Muscle Gain (GAIN)'
-          : 'Weight Maintenance (MAINTAIN)';
+            ? 'Weight / Muscle Gain (GAIN)'
+            : 'Weight Maintenance (MAINTAIN)';
       lines.push(`* **Fitness Goal:** ${goalDisplay}`);
     }
     if (targets.currentWeightKg && targets.targetWeightKg) {
@@ -207,8 +206,8 @@ export class CieResponseComposer {
         targets.goal === 'LOSE'
           ? 'Weight Loss (LOSE)'
           : targets.goal === 'GAIN'
-          ? 'Weight / Muscle Gain (GAIN)'
-          : 'Weight Maintenance (MAINTAIN)';
+            ? 'Weight / Muscle Gain (GAIN)'
+            : 'Weight Maintenance (MAINTAIN)';
       lines.push(`* **Fitness Goal:** ${goalDisplay}`);
     }
     if (targets.currentWeightKg && targets.targetWeightKg) {
