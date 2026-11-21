@@ -3,12 +3,29 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
+export function getDatabaseUrl(): string {
+  const dbUrl = process.env.DATABASE_URL;
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction) {
+    if (!dbUrl || !dbUrl.trim()) {
+      throw new Error(
+        'FATAL: DATABASE_URL environment variable is missing or empty in production mode. Refusing to connect to database.',
+      );
+    }
+    return dbUrl;
+  }
+
+  // Local development / test fallback
+  return dbUrl || 'postgresql://postgres:Password123%40%23%24@localhost:5433/caltrack?schema=public';
+}
+
 @Injectable()
 export class PrismaService implements OnModuleInit, OnModuleDestroy {
   public readonly client: PrismaClient;
 
   constructor() {
-    const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:Password123%40%23%24@localhost:5433/caltrack?schema=public';
+    const dbUrl = getDatabaseUrl();
     const url = new URL(dbUrl);
     
     const pool = new Pool({

@@ -2,8 +2,18 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { pipeline } from '@xenova/transformers';
 
+const dbUrl =
+  process.env.DATABASE_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? ''
+    : 'postgresql://postgres:Password123%40%23%24@localhost:5433/caltrack?schema=public');
+
+if (!dbUrl) {
+  throw new Error('FATAL: DATABASE_URL environment variable is required in production mode.');
+}
+
 const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Password123%40%23%24@localhost:5433/caltrack?schema=public',
+  connectionString: dbUrl,
 });
 const prisma = new PrismaClient({ adapter });
 

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
+import { getCorsOrigins } from './config/cors.config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -10,11 +11,8 @@ async function bootstrap() {
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
-  // Configure CORS: support FRONTEND_URL if provided, else reflect requesting origin
-  const frontendUrlEnv = process.env.FRONTEND_URL;
-  const allowedOrigins = frontendUrlEnv
-    ? frontendUrlEnv.split(',').map((origin) => origin.trim())
-    : true;
+  // Configure CORS: enforce strict origin validation in production
+  const allowedOrigins = getCorsOrigins();
 
   app.enableCors({
     origin: allowedOrigins,

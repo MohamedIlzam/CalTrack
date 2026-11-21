@@ -4,7 +4,7 @@
 
 [![CalTrack CI](https://github.com/MohamedIlzam/CalTrack/actions/workflows/ci.yml/badge.svg)](https://github.com/MohamedIlzam/CalTrack/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/badge/Node-v22+-green.svg)](https://nodejs.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-16.2.2-black.svg)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.4.6-black.svg)](https://nextjs.org/)
 [![NestJS](https://img.shields.io/badge/NestJS-11.0.1-red.svg)](https://nestjs.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector-blue.svg)](https://github.com/pgvector/pgvector)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
@@ -54,6 +54,10 @@ Standard calorie counters struggle with South Asian food culture: curries have v
 ### 6. 📱 Unified Mobile-First UX
 - **Safe-Area Navigation:** Header content adapts dynamically to iOS safe-area insets (`env(safe-area-inset-top)`), clearing both the iPhone camera notch (~47px) and Dynamic Island (~59px).
 - **Unified Header:** Consistent navigation bar across Home, Search, AI Coach, and Progress with single-click profile navigation and complete session logout.
+
+### 7. 🔮 Release Scope & V2 Roadmap Clarification
+- **Meal Photo Scanning / Computer Vision:** AI-powered food photo scanning and computer-vision portion estimation are experimental previews explicitly deferred to **CalTrack V2**. In CalTrack V1, all meal logging and calorie tracking are handled reliably through verified localized search, the interactive plate builder, and dynamic portion scaling.
+- **RAG-to-Coach Generation Status:** While the Nutrition RAG vector retrieval layer (local MiniLM embeddings + PostgreSQL `pgvector`) is fully implemented and production verified, end-to-end generative LLM coach synthesis in production defaults to deterministic, structured nutrition summaries due to Google Gemini API free-tier quota limits.
 
 ---
 
@@ -125,7 +129,7 @@ flowchart TD
 
 | Layer | Technologies | Purpose |
 |---|---|---|
-| **Frontend** | Next.js 16.2 (App Router), React 19, TypeScript | Mobile-first SPA, Turbopack bundling, server components |
+| **Frontend** | Next.js 16.4 (App Router), React 19, TypeScript | Mobile-first SPA, Turbopack bundling, server components |
 | **State & Data Fetching** | Zustand 5, TanStack React Query 5 | Client-side persistent cache, asynchronous query invalidation |
 | **Styling & Motion** | Tailwind CSS v4, Motion 12 | Fluid styling, responsive mobile frame, iOS safe-area handling |
 | **Backend Framework** | NestJS 11, Express, Node.js 22 | Modular backend architecture, dependency injection, REST API |
@@ -196,8 +200,9 @@ To ensure complete transparency for evaluators and developers, here is the curre
 | **CIE Read-Only Nutrition Tools** | ✅ Production Verified | Unit tested with 100% parameter validation and user isolation |
 | **CIE Function Calling Foundation**| ✅ Verified (Synthetic) | Validated via synthetic fixtures and mock tool dispatching |
 | **Nutrition RAG Semantic Retrieval**| ✅ Production Verified | Local MiniLM ONNX embedding + pgvector cosine similarity verified |
-| **Offline Response Fallback** | ✅ Production Verified | Provides structured nutrition summaries when LLM is unavailable |
-| **Live Gemini API Live Stream** | ⚠️ Limited / Fallback | Google Gemini API free-tier keys experience quota / availability constraints; CIE gracefully falls back to deterministic summaries |
+| **Offline / Fallback Response Composer** | ✅ Production Verified | Generates structured, deterministic nutrition summaries; used in production when live LLM is constrained |
+| **Full RAG-to-Coach LLM Generation** | ⚠️ Architecture Foundation | End-to-end LLM generation is implemented as architectural foundation code; due to Google Gemini API free-tier quotas and availability constraints, live production requests rely on the deterministic summary fallback |
+| **Meal Photo Scanning / Image Recognition** | 🔮 Deferred to V2 | Experimental feature intentionally deferred to V2; not part of V1 release scope |
 
 ---
 
@@ -370,11 +375,11 @@ You can deploy using Render's Blueprint (`render.yaml`) or manually:
    - **Health Check Path:** `/health`
 4. Set Environment Variables:
    - `NODE_ENV`: `production`
-   - `DATABASE_URL`: *(Your Neon connection string)*
-   - `REDIS_URL`: *(Your Upstash rediss:// URL)*
-   - `JWT_SECRET`: *(A random 32+ character string)*
-   - `GEMINI_API_KEY`: *(Optional Google AI Studio key)*
-   - `FRONTEND_URL`: `https://<your-vercel-app>.vercel.app`
+   - `DATABASE_URL`: *(Required. PostgreSQL connection string with pgvector support, e.g. Neon. Backend refuses to boot without this.)*
+   - `REDIS_URL`: *(Required for caching and rate limiting. Upstash rediss:// TLS URL)*
+   - `JWT_SECRET`: *(Required. Cryptographically strong string of at least 32 characters. Backend refuses to boot if missing or <32 characters.)*
+   - `FRONTEND_URL`: *(Required in production. Comma-separated allowed frontend origins, e.g. `https://<your-vercel-app>.vercel.app`. Production CORS strictly requires this; wildcards are rejected.)*
+   - `GEMINI_API_KEY`: *(Optional Google AI Studio key; fallback summaries used if absent or quota exhausted)*
 5. Click **Create Web Service**.
 6. Once deployed, run the versioned database migration and idempotent seed from your local CLI targeting the Neon database:
    ```bash
