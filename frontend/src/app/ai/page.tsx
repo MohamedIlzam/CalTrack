@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { AppHeader } from "@/components/ui/AppHeader";
-import { sendCoachChat } from "@/lib/api";
+import { sendCoachChat, fetchUserProfile } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
 import { FormattedText, renderSafeInline } from "@/components/ui/FormattedText";
 
@@ -30,9 +31,11 @@ const SUGGESTION_CHIPS = [
 ];
 
 /* ─────────────── Live Daily Snapshot Card ─────────────── */
-function DailySnapshotCard() {
-  const targetKcal = useAppStore((s) => s.targetCalories) || 2000;
-  const targetProtein = useAppStore((s) => s.targetProteinG) || 120;
+function DailySnapshotCard({ targetCaloriesOverride, targetProteinOverride }: { targetCaloriesOverride?: number; targetProteinOverride?: number }) {
+  const storeKcal = useAppStore((s) => s.targetCalories);
+  const storeProtein = useAppStore((s) => s.targetProteinG);
+  const targetKcal = (targetCaloriesOverride && targetCaloriesOverride > 0) ? targetCaloriesOverride : (storeKcal || 2000);
+  const targetProtein = (targetProteinOverride && targetProteinOverride > 0) ? targetProteinOverride : (storeProtein || 120);
   const targetCarbs = useAppStore((s) => s.targetCarbsG) || 220;
   const targetFat = useAppStore((s) => s.targetFatG) || 60;
   const entries = useAppStore((s) => s.entries);
@@ -93,9 +96,28 @@ function DailySnapshotCard() {
 /* ─────────────── Main Chat Page ─────────────── */
 export default function AIChatPage() {
   const userName = useAppStore((s) => s.name);
-  const targetKcal = useAppStore((s) => s.targetCalories) || 2000;
+  const storeTargetKcal = useAppStore((s) => s.targetCalories);
   const entries = useAppStore((s) => s.entries);
   const consumedKcal = entries.reduce((sum, e) => sum + e.kcal, 0);
+
+  const { data: profile } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: fetchUserProfile,
+  });
+
+  // Keep Zustand store synchronized with authoritative database target calories
+  useEffect(() => {
+    if (profile?.targetCalories) {
+      useAppStore.setState({
+        targetCalories: profile.targetCalories,
+        targetProteinG: profile.targetProteinG ?? undefined,
+        targetCarbsG: profile.targetCarbsG ?? undefined,
+        targetFatG: profile.targetFatG ?? undefined,
+      });
+    }
+  }, [profile]);
+
+  const targetKcal = profile?.targetCalories ?? (storeTargetKcal || 2000);
 
   const initialWelcome = React.useMemo<Message>(() => ({
     id: "welcome",
@@ -336,7 +358,12 @@ export default function AIChatPage() {
               </div>
 
               {/* Optional Rich Snapshot Card */}
-              {msg.card === "daily-summary" && <DailySnapshotCard />}
+              {msg.card === "daily-summary" && (
+                <DailySnapshotCard
+                  targetCaloriesOverride={profile?.targetCalories}
+                  targetProteinOverride={profile?.targetProteinG}
+                />
+              )}
             </div>
           );
         })}

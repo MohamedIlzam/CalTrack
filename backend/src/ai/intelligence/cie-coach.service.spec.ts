@@ -857,4 +857,142 @@ describe('CieCoachService & CIE Coach Integration', () => {
       300,
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Test 17: Recommendation query detection
+  // --------------------------------------------------------------------------
+  it('17. should identify food recommendation inquiries accurately', () => {
+    expect(service.isRecommendationQuery('What should I eat today?')).toBe(true);
+    expect(service.isRecommendationQuery('Any food ideas?')).toBe(true);
+    expect(service.isRecommendationQuery('Dinner ideas under 500 kcal')).toBe(true);
+    expect(service.isRecommendationQuery('High-protein Sri Lankan foods')).toBe(true);
+    expect(service.isRecommendationQuery('Healthy evening snacks')).toBe(true);
+    expect(service.isRecommendationQuery('can you suggest some foods')).toBe(true);
+
+    // Non-recommendation queries
+    expect(service.isRecommendationQuery('How much protein have I had today?')).toBe(false);
+    expect(service.isRecommendationQuery('How much more to go?')).toBe(false);
+    expect(service.isRecommendationQuery('What did I eat for breakfast?')).toBe(false);
+  });
+
+  // --------------------------------------------------------------------------
+  // Test 18: Grounded food recommendation without dumping raw diary list
+  // --------------------------------------------------------------------------
+  it('18. should answer "What should I eat today?" with grounded recommendations tailored to remaining macros', async () => {
+    mockGeminiFunctionCalling.selectTools.mockResolvedValue({
+      prompt: 'What should I eat today?',
+      hasFunctionCalls: true,
+      functionCalls: [
+        { name: 'getDailyNutrition', args: { date: 'today' }, callId: 'c1' },
+        { name: 'getNutritionTargets', args: {}, callId: 'c2' },
+      ],
+    });
+
+    mockToolDispatcher.dispatchBatch.mockResolvedValue([
+      {
+        tool: 'getDailyNutrition',
+        callId: 'c1',
+        success: true,
+        data: {
+          date: testDateStr,
+          totalCalories: 300,
+          totalProtein: 6,
+          totalCarbs: 45,
+          totalFat: 10,
+          meals: [
+            {
+              slot: 'Breakfast',
+              slotCalories: 300,
+              items: [{ name: 'String Hoppers', serving: '10 pieces', calories: 250, protein: 4, carbs: 55, fat: 1 }],
+            },
+          ],
+          isLogged: true,
+        },
+      },
+      {
+        tool: 'getNutritionTargets',
+        callId: 'c2',
+        success: true,
+        data: {
+          targetCalories: 2126,
+          targetProteinG: 133,
+          targetCarbsG: 239,
+          targetFatG: 71,
+          goal: 'GAIN',
+        },
+      },
+    ]);
+
+    const res = await service.handleCoachMessage(
+      mockUserId,
+      'What should I eat today?',
+      testDateStr,
+      testTimeZone,
+    );
+
+    expect(res).not.toBeNull();
+    // Must contain grounded recommendations from CalTrack database
+    expect(res!.reply).toContain('Chicken Curry');
+    expect(res!.reply).toContain('Fish Ambul Thiyal');
+    expect(res!.reply).toContain('Dhal Curry');
+    // Must state remaining macros based on actual saved 2126 target
+    expect(res!.reply).toContain('1,826 kcal remaining');
+    expect(res!.reply).toContain('127g protein to reach goal');
+    // Must NOT repeat raw logged meals list as the answer
+    expect(res!.reply).not.toContain('**Logged Meals:**');
+  });
+
+  // --------------------------------------------------------------------------
+  // Test 19: Grounded food recommendation for "Any food ideas?"
+  // --------------------------------------------------------------------------
+  it('19. should answer "Any food ideas?" with grounded food suggestions, not only target dumping', async () => {
+    mockGeminiFunctionCalling.selectTools.mockResolvedValue({
+      prompt: 'Any food ideas?',
+      hasFunctionCalls: true,
+      functionCalls: [
+        { name: 'getNutritionTargets', args: {}, callId: 'c1' },
+      ],
+    });
+
+    mockToolDispatcher.dispatchBatch.mockResolvedValue([
+      {
+        tool: 'getDailyNutrition',
+        callId: 'c_auto',
+        success: true,
+        data: {
+          date: testDateStr,
+          totalCalories: 300,
+          totalProtein: 6,
+          totalCarbs: 45,
+          totalFat: 10,
+          meals: [],
+          isLogged: true,
+        },
+      },
+      {
+        tool: 'getNutritionTargets',
+        callId: 'c1',
+        success: true,
+        data: {
+          targetCalories: 2126,
+          targetProteinG: 133,
+          targetCarbsG: 239,
+          targetFatG: 71,
+          goal: 'GAIN',
+        },
+      },
+    ]);
+
+    const res = await service.handleCoachMessage(
+      mockUserId,
+      'Any food ideas?',
+      testDateStr,
+      testTimeZone,
+    );
+
+    expect(res).not.toBeNull();
+    expect(res!.reply).toContain('Recommended Dishes from CalTrack Database');
+    expect(res!.reply).toContain('Chicken Curry');
+    expect(res!.reply).not.toContain('You haven\'t configured your nutrition targets yet');
+  });
 });

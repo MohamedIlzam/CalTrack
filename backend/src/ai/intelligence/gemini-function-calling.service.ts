@@ -47,6 +47,29 @@ export class GeminiFunctionCallingService {
     return process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
   }
 
+  public get fallbackModelName(): string {
+    return process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest';
+  }
+
+  public isTransientError(err: any): boolean {
+    const status = err?.status || err?.code;
+    const msg = (err?.message || '').toLowerCase();
+    if (status === 404 || msg.includes('404') || msg.includes('not found') || msg.includes('no longer available')) {
+      return false;
+    }
+    return (
+      status === 503 ||
+      status === 429 ||
+      msg.includes('503') ||
+      msg.includes('429') ||
+      msg.includes('unavailable') ||
+      msg.includes('high demand') ||
+      msg.includes('resource_exhausted') ||
+      msg.includes('spikes in demand') ||
+      msg.includes('too many requests')
+    );
+  }
+
   /**
    * Strict Privacy Boundary Guard:
    * Under CalTrack's free-tier policy, real user nutrition records, targets, and diary items
@@ -130,15 +153,36 @@ You have access to read-only nutrition tools:
 When answering nutrition, food, or goal inquiries, select the appropriate tool(s) from functionDeclarations.
 Do NOT attempt to guess or hallucinate diary data without calling the tools.`;
 
-      const response = await ai.models.generateContent({
-        model: this.modelName,
-        contents: prompt,
-        config: {
-          systemInstruction,
-          tools: [{ functionDeclarations: NUTRITION_TOOL_DECLARATIONS as any }],
-          temperature: 0.1,
-        },
-      });
+      let response: any;
+      let usedModel = this.modelName;
+      try {
+        response = await ai.models.generateContent({
+          model: this.modelName,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            tools: [{ functionDeclarations: NUTRITION_TOOL_DECLARATIONS as any }],
+            temperature: 0.1,
+          },
+        });
+      } catch (firstErr: any) {
+        if (this.isTransientError(firstErr)) {
+          this.logger.warn(`Transient Gemini tool selection error on ${this.modelName} (${firstErr.message}). Retrying on fallback model ${this.fallbackModelName} after backoff...`);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          usedModel = this.fallbackModelName;
+          response = await ai.models.generateContent({
+            model: this.fallbackModelName,
+            contents: prompt,
+            config: {
+              systemInstruction,
+              tools: [{ functionDeclarations: NUTRITION_TOOL_DECLARATIONS as any }],
+              temperature: 0.1,
+            },
+          });
+        } else {
+          throw firstErr;
+        }
+      }
 
       // Extract function calls from response candidates
       const functionCalls: ToolCallRequest[] = [];
@@ -160,7 +204,7 @@ Do NOT attempt to guess or hallucinate diary data without calling the tools.`;
         hasFunctionCalls: functionCalls.length > 0,
         functionCalls,
         rawTextResponse: candidate?.content?.parts?.find((p: any) => p.text)?.text,
-        modelUsed: this.modelName,
+        modelUsed: usedModel,
       };
     } catch (err: any) {
       this.logger.error(`Gemini tool selection failed: ${err.message}`);

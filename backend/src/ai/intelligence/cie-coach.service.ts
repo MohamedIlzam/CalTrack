@@ -75,6 +75,21 @@ export class CieCoachService {
   }
 
   /**
+   * Identifies user questions asking for food suggestions, meal ideas, or eating recommendations.
+   */
+  public isRecommendationQuery(message: string): boolean {
+    const clean = message.toLowerCase().trim();
+    return (
+      /\b(what\s+should\s+i\s+eat|what\s+can\s+i\s+eat|what\s+to\s+eat)\b/i.test(clean) ||
+      /\b(food\s+ideas?|meal\s+ideas?|snack\s+ideas?|dinner\s+ideas?|lunch\s+ideas?|breakfast\s+ideas?)\b/i.test(clean) ||
+      (/\b(suggest|recommend|recommendation|recommendations|ideas?)\b/i.test(clean) &&
+        /\b(food|foods|meal|meals|snack|snacks|eat|eating|dish|dishes)\b/i.test(clean)) ||
+      /\bwhat\s+(should|can)\s+i\s+(have|cook|prepare)\b/i.test(clean) ||
+      /\b(high-protein|healthy|low-calorie|post-workout)\s+(.+?\s+)?(foods?|meals?|snacks?|dishes)\b/i.test(clean)
+    );
+  }
+
+  /**
    * Retrieves user follow-up context from Redis or memory fallback.
    */
   private async getContext(userId: string): Promise<CieConversationContext> {
@@ -131,10 +146,12 @@ export class CieCoachService {
     }
 
     // 3. Conversation Context Lookup
-    const currentSubject = this.extractSubject(trimmed);
+    const isRecommendation = this.isRecommendationQuery(trimmed);
+    const currentSubject = isRecommendation ? 'recommendation' : this.extractSubject(trimmed);
     const previousContext = await this.getContext(userId);
     const activeContext: CieConversationContext = {
       lastSubject: currentSubject || previousContext.lastSubject,
+      isRecommendation,
       lastDate: resolvedTodayStr,
     };
 
@@ -143,7 +160,16 @@ export class CieCoachService {
     try {
       selection = await this.geminiFunctionCalling.selectTools(trimmed, resolvedTodayStr);
     } catch (err: any) {
-      this.logger.warn(`Gemini tool selection failed (${err.message}); falling back to local diary intent.`);
+      this.logger.warn(`Gemini tool selection failed (${err.message}); falling back to local handling.`);
+      if (isRecommendation) {
+        const toolResults = await this.toolDispatcher.dispatchBatch(userId, [
+          { name: 'getDailyNutrition', args: { date: resolvedTodayStr } },
+          { name: 'getNutritionTargets', args: {} },
+        ]);
+        const composedReply = CieResponseComposer.composeCombinedResponse(toolResults, activeContext);
+        return { reply: composedReply };
+      }
+
       // Graceful fallback to regex intent handler when Gemini is unreachable or rate-limited
       const fallback = await this.diarySummaryService.tryHandleCoachDiaryIntent(
         userId,
@@ -160,8 +186,16 @@ export class CieCoachService {
       };
     }
 
-    // 5. If no nutrition tools were requested, return null to let standard conversational Coach answer
+    // 5. If no nutrition tools were requested, check recommendation fallback or return null for standard Coach
     if (!selection || !selection.hasFunctionCalls || selection.functionCalls.length === 0) {
+      if (isRecommendation) {
+        const toolResults = await this.toolDispatcher.dispatchBatch(userId, [
+          { name: 'getDailyNutrition', args: { date: resolvedTodayStr } },
+          { name: 'getNutritionTargets', args: {} },
+        ]);
+        const composedReply = CieResponseComposer.composeCombinedResponse(toolResults, activeContext);
+        return { reply: composedReply };
+      }
       return null;
     }
 
@@ -193,6 +227,22 @@ export class CieCoachService {
         callId: call.callId,
       };
     });
+
+    // If recommendation query, guarantee both daily nutrition and targets are dispatched for macro awareness
+    if (isRecommendation) {
+      if (!normalizedCalls.some((c) => c.name === 'getDailyNutrition')) {
+        normalizedCalls.push({
+          name: 'getDailyNutrition',
+          args: { date: resolvedTodayStr },
+        });
+      }
+      if (!normalizedCalls.some((c) => c.name === 'getNutritionTargets')) {
+        normalizedCalls.push({
+          name: 'getNutritionTargets',
+          args: {},
+        });
+      }
+    }
 
     // 7. Execute Tools Under Server-Side Authenticated Identity
     const toolResults = await this.toolDispatcher.dispatchBatch(userId, normalizedCalls);

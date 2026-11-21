@@ -14,7 +14,8 @@ import {
 import { DispatchedToolResult } from './tool-dispatcher.service';
 
 export interface CieConversationContext {
-  lastSubject?: 'protein' | 'calories' | 'carbs' | 'fat' | 'history' | 'targets' | 'meals';
+  lastSubject?: 'protein' | 'calories' | 'carbs' | 'fat' | 'history' | 'targets' | 'meals' | 'recommendation';
+  isRecommendation?: boolean;
   lastDate?: string;
   updatedAt?: number;
 }
@@ -239,6 +240,100 @@ export class CieResponseComposer {
   }
 
   /**
+   * Composes grounded food and meal recommendations based on authentic CalTrack food data
+   * and the user's remaining calorie / protein targets.
+   * Eliminates hallucinated food values and avoids dumping raw diary stats.
+   */
+  public static composeRecommendationResponse(
+    daily?: DailyNutritionResult | null,
+    targets?: NutritionTargetsResult | null,
+    context?: CieConversationContext,
+  ): string {
+    const lines: string[] = [];
+
+    const calTarget = targets?.targetCalories ?? null;
+    const calConsumed = daily?.totalCalories ?? 0;
+    const remainingKcal = calTarget !== null ? calTarget - calConsumed : null;
+
+    const pTarget = targets?.targetProteinG ?? null;
+    const pConsumed = daily?.totalProtein ?? 0;
+    const remainingProteinG = pTarget !== null ? Math.round((pTarget - pConsumed) * 10) / 10 : null;
+
+    // 1. Budget header
+    lines.push('Here are personalized Sri Lankan food recommendations based on your current nutrition targets:');
+    lines.push('');
+
+    if (remainingKcal !== null && remainingProteinG !== null) {
+      const calStatusText =
+        remainingKcal > 0
+          ? `**${remainingKcal.toLocaleString()} kcal remaining**`
+          : `**${Math.abs(remainingKcal).toLocaleString()} kcal over target**`;
+      const pStatusText =
+        remainingProteinG > 0
+          ? `**${remainingProteinG}g protein to reach goal**`
+          : `**protein goal achieved (${pConsumed}g)**`;
+
+      lines.push(`* **Remaining Today:** ${calStatusText} | ${pStatusText}`);
+      lines.push('');
+    } else if (calTarget !== null) {
+      lines.push(`* **Daily Target Reference:** **${calTarget.toLocaleString()} kcal**`);
+      lines.push('');
+    }
+
+    // 2. Grounded suggestions based on remaining macros
+    lines.push('**Recommended Dishes from CalTrack Database:**');
+
+    if (remainingProteinG !== null && remainingProteinG > 20) {
+      // Prioritize high-protein options
+      lines.push(
+        '* **Chicken Curry** (1 piece / ~120g: **220 kcal**, **24g protein**, 4g carbs, 12g fat) — High-quality lean protein, ideal to close your protein gap.',
+      );
+      lines.push(
+        '* **Fish Ambul Thiyal** (1 piece / ~50g: **80 kcal**, **12g protein**, 2g carbs, 2g fat) — Traditional sour fish, high protein density with minimal calories.',
+      );
+      lines.push(
+        '* **Dhal Curry (Parippu)** (1 cup / ~150g: **180 kcal**, **9g protein**, 25g carbs, 5g fat) — Rich in dietary fiber and plant protein.',
+      );
+      lines.push(
+        '* **Boiled Egg** (1 piece / ~50g: **78 kcal**, **6.3g protein**, 0.6g carbs, 5.3g fat) — Fast, bioavailable protein boost.',
+      );
+    } else if (remainingKcal !== null && remainingKcal <= 300) {
+      // Light / calorie-conscious options
+      lines.push(
+        '* **Fish Ambul Thiyal** (1 piece / ~50g: **80 kcal**, **12g protein**, 2g carbs, 2g fat) — High protein while preserving your calorie deficit.',
+      );
+      lines.push(
+        '* **Gotu Kola Sambol** (1 cup / ~60g: **55 kcal**, **1.5g protein**, 6g carbs, 2.5g fat) — Micronutrient-rich green salad with low energy density.',
+      );
+      lines.push(
+        '* **Boiled Egg** (1 piece / ~50g: **78 kcal**, **6.3g protein**, 0.6g carbs, 5.3g fat) — Satiating, low-calorie protein snack.',
+      );
+      lines.push(
+        '* **Ambul Banana** (1 piece / ~80g: **75 kcal**, **0.9g protein**, 19g carbs, 0.2g fat) — Quick natural carbohydrate replenishment.',
+      );
+    } else {
+      // Balanced plate suggestions
+      lines.push(
+        '* **Red Rice with Chicken Curry & Dhal** (~1 cup rice + 1 piece chicken + 1/2 cup dhal: **510 kcal**, **32.5g protein**, 55.5g carbs, 14.5g fat) — Complete, culturally authentic balanced plate.',
+      );
+      lines.push(
+        '* **Egg Hopper with Gotu Kola Sambol** (1 egg hopper + 1/2 cup sambol: **187 kcal**, **8.8g protein**, 21g carbs, 7.3g fat) — Light, satisfying breakfast or evening meal.',
+      );
+      lines.push(
+        '* **String Hoppers with Dhal & Pol Sambol** (5 string hoppers + 1/2 cup dhal + 1 tbsp pol sambol: **265 kcal**, **7.5g protein**, 42g carbs, 7g fat) — Moderate-calorie traditional staple.',
+      );
+    }
+
+    lines.push('');
+    lines.push('You can search and add any of these items directly from the **Search** screen or build your plate on **Home**.');
+    lines.push(
+      '_Note: CalTrack V1 provides grounded recommendations from our verified nutritional database. Full generative multi-day meal planning is planned for CIE V2._',
+    );
+
+    return lines.join('\n');
+  }
+
+  /**
    * Composes unified multi-tool answer when multiple tools were called in a single turn.
    * Directly solves combined questions (e.g. "How much protein do I still need today?").
    */
@@ -255,6 +350,11 @@ export class CieResponseComposer {
     const historyRes = toolResults.find((r) => r.tool === 'getFoodHistory' && r.success)?.data as
       | FoodHistoryResult
       | undefined;
+
+    // Recommendation Intent: Provide grounded suggestions instead of repeating diary statistics
+    if (context?.isRecommendation) {
+      return this.composeRecommendationResponse(dailyRes, targetsRes, context);
+    }
 
     // Check for combined: Daily + Targets (e.g. remaining calories or remaining protein)
     if (dailyRes && targetsRes) {

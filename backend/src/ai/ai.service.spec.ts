@@ -252,15 +252,23 @@ describe('AiService', () => {
     });
 
     it('should correctly classify transient Gemini errors for retry', () => {
-      const isTransient = (service as any).isTransientGeminiError.bind(service);
+      const isTransient = service.isTransientGeminiError.bind(service);
       expect(isTransient({ status: 503, message: 'Service Unavailable' })).toBe(true);
       expect(isTransient({ code: 503, message: 'Unavailable' })).toBe(true);
       expect(isTransient({ message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary.' })).toBe(true);
       expect(isTransient({ status: 429, message: 'Resource exhausted' })).toBe(true);
       expect(isTransient({ message: '429 Too Many Requests' })).toBe(true);
 
+      // Must explicitly NOT treat HTTP 404 (model not found / deprecated) as transient
+      expect(isTransient({ status: 404, message: 'Not Found' })).toBe(false);
+      expect(isTransient({ code: 404, message: 'This model models/gemini-2.5-flash is no longer available to new users.' })).toBe(false);
       expect(isTransient({ status: 400, message: 'Bad Request' })).toBe(false);
       expect(isTransient({ message: 'Invalid API key' })).toBe(false);
+    });
+
+    it('should resolve primary and supported fallback model names via configuration', () => {
+      expect(service.modelName).toBe('gemini-3.5-flash-lite');
+      expect(service.fallbackModelName).toBe('gemini-flash-lite-latest');
     });
 
     it('should produce structured food suggestion result for valid output', () => {
