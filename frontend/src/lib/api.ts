@@ -1,5 +1,21 @@
 import { useAppStore } from "@/store/useAppStore";
 
+/**
+ * Resolves the backend API base URL:
+ * 1. Uses process.env.NEXT_PUBLIC_API_URL if configured (trimming any trailing slashes).
+ * 2. In browser environments without NEXT_PUBLIC_API_URL, derives `http://${window.location.hostname}:3001`.
+ * 3. In SSR or test environments, falls back to `http://localhost:3001`.
+ */
+export function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "");
+  }
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    return `http://${window.location.hostname}:3001`;
+  }
+  return "http://localhost:3001";
+}
+
 export function getBackendHost(): string {
   if (typeof window !== "undefined") {
     return window.location.hostname;
@@ -31,36 +47,75 @@ export function getAuthToken(): string | null {
   return null;
 }
 
-const DEFAULT_TIMEOUT_MS = 10000; // 10 seconds
+export interface FetchWithTimeoutOptions extends RequestInit {
+  retryOnColdStart?: boolean;
+}
+
+const DEFAULT_TIMEOUT_MS = 15000; // 15 seconds default
+const COLD_START_TIMEOUT_MS = 45000; // 45 seconds for cold start retry
 
 export async function fetchWithTimeout(
   url: string,
-  options: RequestInit = {},
+  options: FetchWithTimeoutOptions = {},
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    controller.abort(new Error(`Request timed out after ${timeoutMs}ms`));
-  }, timeoutMs);
+  const method = (options.method || 'GET').toUpperCase();
+  // Safe default: only idempotent GET requests are eligible for a single cold-start retry
+  const canRetry = options.retryOnColdStart ?? (method === 'GET');
+  const maxAttempts = canRetry ? 2 : 1;
 
-  if (options.signal) {
-    options.signal.addEventListener('abort', () => controller.abort());
-  }
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    attempt++;
+    const currentTimeout = attempt > 1 ? COLD_START_TIMEOUT_MS : timeoutMs;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new Error(`Request timed out after ${currentTimeout}ms`));
+    }, currentTimeout);
 
-  try {
-    const res = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    return res;
-  } catch (err: any) {
-    if (err?.name === 'AbortError' || controller.signal.aborted) {
-      throw new Error(`Connection timed out after ${Math.round(timeoutMs / 1000)}s. Please check your network connection.`);
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => controller.abort());
     }
-    throw err;
-  } finally {
-    clearTimeout(timer);
+
+    try {
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+
+      // Render free-tier returns 502, 503, or 504 while waking up the spin-down container
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < maxAttempts) {
+        clearTimeout(timer);
+        // Wait 2 seconds before the single retry
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      clearTimeout(timer);
+      return res;
+    } catch (err: any) {
+      clearTimeout(timer);
+      const isAbortOrNetwork =
+        err?.name === 'AbortError' ||
+        controller.signal.aborted ||
+        err?.message?.includes('fetch failed');
+
+      if (isAbortOrNetwork && attempt < maxAttempts) {
+        // Wait 2 seconds before the single retry
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        throw new Error(
+          `Connection timed out after ${Math.round(currentTimeout / 1000)}s. The backend may be waking up from sleep. Please try again.`
+        );
+      }
+      throw err;
+    }
   }
+
+  throw new Error('Connection failed. Please check your network connection.');
 }
 
 export interface ApiMealLogEntry {
@@ -94,8 +149,8 @@ export async function fetchDailyLog(dateStr: string): Promise<ApiMealLog | null>
   const token = getAuthToken();
   if (!token) return null;
   
-  const host = getBackendHost();
-  const res = await fetchWithTimeout(`http://${host}:3001/meal/daily?date=${dateStr}`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetchWithTimeout(`${baseUrl}/meal/daily?date=${dateStr}`, {
     headers: { Authorization: `Bearer ${token}` },
   }, 10000);
 
@@ -134,9 +189,9 @@ export interface UpdateMealPayload {
 
 export async function postLogMeal(payload: LogMealPayload): Promise<ApiMealLogEntry> {
   const token = getAuthToken();
-  const host = getBackendHost();
+  const baseUrl = getApiBaseUrl();
 
-  const res = await fetchWithTimeout(`http://${host}:3001/meal/log`, {
+  const res = await fetchWithTimeout(`${baseUrl}/meal/log`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -164,9 +219,9 @@ export async function postLogMeal(payload: LogMealPayload): Promise<ApiMealLogEn
 
 export async function updateMealEntry(id: string, payload: UpdateMealPayload): Promise<ApiMealLogEntry> {
   const token = getAuthToken();
-  const host = getBackendHost();
+  const baseUrl = getApiBaseUrl();
 
-  const res = await fetchWithTimeout(`http://${host}:3001/meal/entry/${id}`, {
+  const res = await fetchWithTimeout(`${baseUrl}/meal/entry/${id}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -194,9 +249,9 @@ export async function updateMealEntry(id: string, payload: UpdateMealPayload): P
 
 export async function deleteMealEntry(id: string): Promise<void> {
   const token = getAuthToken();
-  const host = getBackendHost();
+  const baseUrl = getApiBaseUrl();
 
-  const res = await fetchWithTimeout(`http://${host}:3001/meal/entry/${id}`, {
+  const res = await fetchWithTimeout(`${baseUrl}/meal/entry/${id}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -228,8 +283,8 @@ export async function fetchWeightHistory(): Promise<WeightEntry[]> {
   const token = getAuthToken();
   if (!token) return [];
 
-  const host = getBackendHost();
-  const res = await fetchWithTimeout(`http://${host}:3001/progress/weight`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetchWithTimeout(`${baseUrl}/progress/weight`, {
     headers: { Authorization: `Bearer ${token}` },
   }, 10000);
 
@@ -243,9 +298,9 @@ export async function fetchWeightHistory(): Promise<WeightEntry[]> {
 
 export async function postWeightLog(weightKg: number): Promise<WeightEntry> {
   const token = getAuthToken();
-  const host = getBackendHost();
+  const baseUrl = getApiBaseUrl();
 
-  const res = await fetchWithTimeout(`http://${host}:3001/progress/weight`, {
+  const res = await fetchWithTimeout(`${baseUrl}/progress/weight`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -266,8 +321,8 @@ export async function fetchAdherence(days: number = 7): Promise<AdherenceDay[]> 
   const token = getAuthToken();
   if (!token) return [];
 
-  const host = getBackendHost();
-  const res = await fetchWithTimeout(`http://${host}:3001/progress/adherence?days=${days}`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetchWithTimeout(`${baseUrl}/progress/adherence?days=${days}`, {
     headers: { Authorization: `Bearer ${token}` },
   }, 10000);
 
@@ -299,8 +354,8 @@ export async function fetchUserProfile(): Promise<UserProfile | null> {
   const token = getAuthToken();
   if (!token) return null;
 
-  const host = getBackendHost();
-  const res = await fetchWithTimeout(`http://${host}:3001/auth/profile`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetchWithTimeout(`${baseUrl}/auth/profile`, {
     headers: { Authorization: `Bearer ${token}` },
   }, 10000);
 
@@ -314,9 +369,9 @@ export async function fetchUserProfile(): Promise<UserProfile | null> {
 
 export async function updateUserProfile(payload: Partial<UserProfile>): Promise<UserProfile> {
   const token = getAuthToken();
-  const host = getBackendHost();
+  const baseUrl = getApiBaseUrl();
 
-  const res = await fetchWithTimeout(`http://${host}:3001/auth/profile`, {
+  const res = await fetchWithTimeout(`${baseUrl}/auth/profile`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -354,9 +409,9 @@ export interface AiParseResponse {
 
 export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
   const token = getAuthToken();
-  const host = getBackendHost();
+  const baseUrl = getApiBaseUrl();
 
-  const res = await fetchWithTimeout(`http://${host}:3001/ai/parse-prompt`, {
+  const res = await fetchWithTimeout(`${baseUrl}/ai/parse-prompt`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -375,10 +430,10 @@ export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
 
 export async function sendCoachChat(message: string, date?: string): Promise<{ reply: string }> {
   const token = getAuthToken();
-  const host = getBackendHost();
+  const baseUrl = getApiBaseUrl();
   const timeZone = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Asia/Colombo';
 
-  const res = await fetchWithTimeout(`http://${host}:3001/ai/chat`, {
+  const res = await fetchWithTimeout(`${baseUrl}/ai/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -397,9 +452,9 @@ export async function sendCoachChat(message: string, date?: string): Promise<{ r
 
 export async function scanMealImage(imageBase64: string): Promise<AiParseResponse> {
   const token = getAuthToken();
-  const host = getBackendHost();
+  const baseUrl = getApiBaseUrl();
 
-  const res = await fetchWithTimeout(`http://${host}:3001/ai/scan-image`, {
+  const res = await fetchWithTimeout(`${baseUrl}/ai/scan-image`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

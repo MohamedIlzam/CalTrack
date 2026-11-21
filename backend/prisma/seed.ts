@@ -41,21 +41,27 @@ async function main() {
   // Load the feature extraction pipeline
   const generateEmbedding = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
 
-  console.log('Clearing existing data...');
-  await prisma.food.deleteMany({});
-  await prisma.region.deleteMany({});
-  
-  console.log('Creating LK Region...');
-  const region = await prisma.region.create({
-    data: {
+  console.log('Ensuring LK Region exists...');
+  const region = await prisma.region.upsert({
+    where: { id: 'LK' },
+    update: {},
+    create: {
       id: 'LK',
       name: 'Sri Lanka',
       currency: 'LKR',
-    }
+    },
   });
 
-  console.log('Seeding Sri Lankan foods and generating embeddings...');
+  console.log('Seeding Sri Lankan foods and generating embeddings idempotently...');
   for (const item of sriLankanFoods) {
+    const existing = await prisma.food.findFirst({
+      where: { name: item.name, regionId: region.id },
+    });
+    if (existing) {
+      console.log(`- Food already seeded: ${item.name}`);
+      continue;
+    }
+
     // Calculate values per 100g to adhere to normalized schema
     const multiplier = 100 / item.gramEq;
     

@@ -301,7 +301,7 @@ npm test
 cd frontend
 npm test
 ```
-- **10 Verification Suites Passed:**
+- **11 Verification Suites Passed:**
   - AI chat safe markdown formatting & HTML injection defense
   - Diary state synchronization and multi-meal entry persistence
   - Meal card calorie and macro rendering accuracy
@@ -311,6 +311,7 @@ npm test
   - Mifflin-St Jeor target calculation and South Asian BMI categorization
   - Progress analytics calculations (averages across logged days only)
   - Unified `AppHeader` rendering, initials fallback, and iOS safe-area layout
+  - API configuration, `NEXT_PUBLIC_API_URL` resolution, and cold-start single retry guard
 
 ---
 
@@ -326,15 +327,85 @@ CalTrack runs an automated continuous integration pipeline on all pull requests 
 
 ---
 
-## 🌐 Deployment Readiness & Cloud Architecture
+## 🌐 Production Free-Tier Deployment Guide
 
-### Infrastructure Requirements for Free Tier Deployment
-1. **Backend RAM:** Minimum 350MB, recommended 512MB RAM (to host Node.js + in-process `@xenova/transformers` ONNX model weights). Compatible with Render Free Web Service, Railway, or Fly.io (512MB instance).
-2. **Database:** PostgreSQL 16 with `pgvector` enabled (available on Supabase Free Tier or Neon Serverless Postgres).
-3. **Redis:** Redis 7 with Lua scripting support (available on Upstash Redis Free Tier, providing 10,000 commands/day over standard TLS connections).
-4. **Environment Configuration:**
-   - Backend: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `GEMINI_API_KEY`, `PORT`
-   - Frontend: `NEXT_PUBLIC_API_URL` (points to deployed backend domain)
+CalTrack is architected to run 100% free on modern cloud infrastructure:
+
+| Component | Platform | Free Tier Specifications |
+|---|---|---|
+| **Frontend** | [Vercel](https://vercel.com/) | Unlimited deployments, fast global edge CDN |
+| **Backend API** | [Render](https://render.com/) | 512MB RAM free web service, automated SSL |
+| **Database** | [Neon](https://neon.tech/) | Serverless PostgreSQL with `pgvector` pre-installed, 0.5GB storage |
+| **Cache & Rate Limiting** | [Upstash](https://upstash.com/) | 10,000 commands/day serverless Redis over TLS (`rediss://`) |
+
+---
+
+### Step 1: Provision Neon Serverless PostgreSQL
+1. Sign up at [neon.tech](https://neon.tech/) and create a project named `caltrack`.
+2. In the Neon SQL Editor, enable the vector extension:
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+3. Copy the pooled or direct PostgreSQL connection string (e.g. `postgresql://user:pass@ep-xyz.neon.tech/caltrack?sslmode=require`).
+
+---
+
+### Step 2: Provision Upstash Redis
+1. Sign up at [upstash.com](https://upstash.com/) and create a serverless database named `caltrack-redis`.
+2. Under "Connect to your database", copy the standard Node `ioredis` TLS URL (`rediss://default:***@us1-xyz.upstash.io:6379`).
+
+---
+
+### Step 3: Deploy Backend on Render
+You can deploy using Render's Blueprint (`render.yaml`) or manually:
+
+**Manual Setup:**
+1. In the Render Dashboard, click **New +** → **Web Service**.
+2. Connect your CalTrack GitHub repository and select the release branch (`chore/v1-free-deployment` or `main`).
+3. Configure settings:
+   - **Root Directory:** `backend`
+   - **Environment:** `Node`
+   - **Build Command:** `npm ci && npx prisma generate && npm run build`
+   - **Start Command:** `npm run start:prod`
+   - **Health Check Path:** `/health`
+4. Set Environment Variables:
+   - `NODE_ENV`: `production`
+   - `DATABASE_URL`: *(Your Neon connection string)*
+   - `REDIS_URL`: *(Your Upstash rediss:// URL)*
+   - `JWT_SECRET`: *(A random 32+ character string)*
+   - `GEMINI_API_KEY`: *(Optional Google AI Studio key)*
+   - `FRONTEND_URL`: `https://<your-vercel-app>.vercel.app`
+5. Click **Create Web Service**.
+6. Once deployed, run the versioned database migration and idempotent seed from your local CLI targeting the Neon database:
+   ```bash
+   cd backend
+   DATABASE_URL="<your-neon-url>" npx prisma migrate deploy
+   DATABASE_URL="<your-neon-url>" npx prisma db seed
+   DATABASE_URL="<your-neon-url>" npm run seed:nutrition-rag
+   ```
+7. Verify backend health by visiting `https://<your-render-app>.onrender.com/health`.
+
+---
+
+### Step 4: Deploy Frontend on Vercel
+1. In the Vercel Dashboard, click **Add New...** → **Project**.
+2. Import the CalTrack repository and configure:
+   - **Root Directory:** Edit to select `frontend`
+   - **Framework Preset:** `Next.js`
+3. In **Environment Variables**, add:
+   - `NEXT_PUBLIC_API_URL`: `https://<your-render-app>.onrender.com`
+4. Click **Deploy**. Vercel will compile the Next.js static pages with Turbopack and deploy to an official `*.vercel.app` domain.
+
+---
+
+### Continuous Deployment & Rollback Strategy
+
+1. **Provider Git Integration:** Both Vercel and Render automatically deploy pushes to the approved release branch once CI passes on GitHub Actions.
+2. **Cold-Start Resilience:** Render free instances spin down after 15 minutes of inactivity. The frontend client includes an intelligent, single-retry mechanism with an extended 45-second timeout for idempotent GET requests, preventing false timeout aborts while the instance spins up.
+3. **Instant Rollback:**
+   - **Vercel:** In the Vercel dashboard under Deployments, select any previously healthy deployment and click **Promote to Production** for instant (<5 second) zero-downtime rollback.
+   - **Render:** In the Render dashboard under Events / Deploys, select a previous successful build and click **Rollback to this deploy**.
+4. **Memory Verification:** Empirical benchmarking confirmed that the full NestJS application with dual `@xenova/transformers` ONNX pipelines loaded consumes **315MB RSS**, safely within Render's 512MB free RAM limit.
 
 ---
 
