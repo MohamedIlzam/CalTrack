@@ -375,4 +375,30 @@ describe('AiService', () => {
       ).toThrow('AI nutrient values must be valid finite numbers');
     });
   });
+
+  describe('isTransientGeminiError', () => {
+    it('should identify 503, 429, 408, and timeout errors as transient', () => {
+      expect(service.isTransientGeminiError({ status: 503 })).toBe(true);
+      expect(service.isTransientGeminiError({ code: 429 })).toBe(true);
+      expect(service.isTransientGeminiError({ status: 408 })).toBe(true);
+      expect(service.isTransientGeminiError(new Error('AI request timed out after 9s'))).toBe(true);
+      expect(service.isTransientGeminiError(new Error('Connection timeout'))).toBe(true);
+      expect(service.isTransientGeminiError(new Error('High demand on model service'))).toBe(true);
+    });
+
+    it('should NOT treat HTTP 404 or deprecated model errors as transient', () => {
+      expect(service.isTransientGeminiError({ status: 404 })).toBe(false);
+      expect(service.isTransientGeminiError(new Error('Model not found'))).toBe(false);
+      expect(service.isTransientGeminiError(new Error('Resource is no longer available'))).toBe(false);
+    });
+  });
+
+  describe('provenance labeling', () => {
+    it('should return CalTrack Local provenance for greeting fast path', async () => {
+      const res = await service.parsePrompt('hello');
+      expect(res.provenance).toBeDefined();
+      expect(res.provenance.source).toBe('caltrack_local');
+      expect(res.provenance.label).toBe('CalTrack Local');
+    });
+  });
 });

@@ -6,6 +6,13 @@ import { DiarySummaryService } from '../diary-summary.service';
 import { NutritionRagService } from './rag/nutrition-rag.service';
 import { resolveDiaryDate, parseLocalDate } from '../../common/date.util';
 import { RedisService } from '../../redis/redis.service';
+import {
+  AiProvenance,
+  PROVENANCE_CALTRACK_DATA,
+  PROVENANCE_CALTRACK_LOCAL,
+  PROVENANCE_LOCAL_FALLBACK,
+  PROVENANCE_GEMINI,
+} from '../provenance.types';
 
 @Injectable()
 export class CieCoachService {
@@ -120,16 +127,66 @@ export class CieCoachService {
   }
 
   /**
+   * Checks whether the user query has explicit personal intake/consumption or personal diary intent.
+   */
+  public hasPersonalConsumptionIntent(message: string): boolean {
+    const clean = message.toLowerCase().trim();
+
+    // Explicit diary or logging terms
+    if (/\b(diary|logged|logging|log|history|consistency|trend|trends|intake|records?)\b/i.test(clean)) {
+      return true;
+    }
+
+    // Time-based queries referencing today, yesterday, or past days
+    if (/\b(today|yesterday|past\s+\d+\s+days?|last\s+\d+\s+days?|last\s+week|past\s+week|so\s+far)\b/i.test(clean)) {
+      return true;
+    }
+
+    // Personal pronouns combined with food, eating, or macronutrients
+    const hasPersonalPronoun = /\b(i|my|me|mine|we|our)\b/i.test(clean);
+    const hasNutritionTerm = /\b(eat|eating|eaten|ate|had|have|consumed|meals?|food|foods|protein|calories?|kcal|carbs?|fat|macros?|budget|target|targets|goal|goals|left|remaining|need|needs)\b/i.test(clean);
+    if (hasPersonalPronoun && hasNutritionTerm) {
+      return true;
+    }
+
+    if (/\b(did|have)\s+i\b/i.test(clean)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Checks whether the user is asking for multi-week, 30-day, or forward-looking meal plans.
+   */
+  public isMultiDayPlanningQuery(message: string): boolean {
+    const clean = message.toLowerCase().trim();
+    return (
+      /\b(?:30|thirty|60|sixty|90|ninety)\s*[- ]?day\s+(?:plan|diet|program|meal\s*plan|workout|routine)\b/i.test(clean) ||
+      (/\b(30|thirty)\s*day\b/i.test(clean) && /\b(plan|diet|meal|program)\b/i.test(clean)) ||
+      /\b(create|give\s+me|make|generate)\s+(a\s+)?(?:30|thirty|multi-week)\s*day\b/i.test(clean)
+    );
+  }
+
+  /**
+   * Checks whether the user is asking about their personal profile, targets, or identity.
+   */
+  public isProfileOverviewQuery(message: string): boolean {
+    const clean = message.toLowerCase().trim();
+    return /\b(tell\s+me\s+about\s+myself|who\s+am\s+i|about\s+me|my\s+profile|show\s+my\s+profile)\b/i.test(clean);
+  }
+
+  /**
    * Main CIE Coach entry point.
-   * Returns `{ reply: string }` if a nutrition query was handled by CIE,
-   * or `null` if the request is a general conversational chat that should fall through to standard Coach.
+   * Returns `{ reply: string; provenance: AiProvenance }` if a nutrition query was handled by CIE,
+   * or `null` if the request is a general food/conversational chat that should fall through to standard Coach.
    */
   async handleCoachMessage(
     userId: string,
     message: string,
     dateStr?: string,
     timeZone?: string,
-  ): Promise<{ reply: string } | null> {
+  ): Promise<{ reply: string; provenance: AiProvenance } | null> {
     const trimmed = message.trim();
 
     // 1. Resolve local calendar dates consistently
@@ -139,13 +196,55 @@ export class CieCoachService {
     yesterdayUtc.setUTCDate(yesterdayUtc.getUTCDate() - 1);
     const resolvedYesterdayStr = yesterdayUtc.toISOString().split('T')[0];
 
-    // 2. Conservative Privacy Boundary Check
-    if (!this.isPrivacySafePrompt(trimmed)) {
-      this.logger.warn(`Prompt failed privacy check; falling back to local deterministic handling.`);
-      return this.diarySummaryService.tryHandleCoachDiaryIntent(userId, trimmed, dateStr, timeZone);
+    // 2. Intercept multi-week / 30-day planning requests (Scope Limitation)
+    if (this.isMultiDayPlanningQuery(trimmed)) {
+      return {
+        reply:
+          "CalTrack V1 specializes in real-time daily nutrition tracking, instant meal analysis, and grounded recommendations based on your daily targets. Comprehensive multi-week and 30-day meal planning is deferred to CalTrack Intelligence Engine V2.\n\nIn V1, you can:\n* Check your daily calorie and macronutrient targets\n* Ask for single-meal or snack recommendations matching your remaining budget\n* Review your logging consistency over the past 7 days\n* Log custom or AI-estimated meals on Home and Search",
+        provenance: {
+          source: 'caltrack_local',
+          label: 'CalTrack Local',
+          details: 'V1 scope limitation guidance',
+        },
+      };
     }
 
-    // 3. Conversation Context Lookup
+    // 3. Intercept profile overview queries (e.g. "tell me about myself")
+    if (this.isProfileOverviewQuery(trimmed)) {
+      const toolResults = await this.toolDispatcher.dispatchBatch(userId, [
+        { name: 'getNutritionTargets', args: {} },
+      ]);
+      const targetsRes = toolResults.find((r) => r.tool === 'getNutritionTargets' && r.success)?.data;
+      const composedReply = CieResponseComposer.composeProfileOverview(targetsRes as any);
+      await this.saveContext(userId, { lastSubject: 'profile' });
+      return {
+        reply: composedReply,
+        provenance: {
+          source: 'caltrack_data',
+          label: 'CalTrack Data',
+          details: 'Authenticated user profile and targets',
+        },
+      };
+    }
+
+    // 4. Conservative Privacy Boundary Check
+    if (!this.isPrivacySafePrompt(trimmed)) {
+      this.logger.warn(`Prompt failed privacy check; falling back to local deterministic handling.`);
+      const fallback = await this.diarySummaryService.tryHandleCoachDiaryIntent(userId, trimmed, dateStr, timeZone);
+      if (fallback) {
+        return fallback;
+      }
+      return {
+        reply: 'I cannot process prompts containing credentials or sensitive personal information. Please ask a nutrition question instead.',
+        provenance: {
+          source: 'caltrack_local',
+          label: 'CalTrack Local',
+          details: 'Privacy boundary filter',
+        },
+      };
+    }
+
+    // 5. Conversation Context Lookup
     const isRecommendation = this.isRecommendationQuery(trimmed);
     const currentSubject = isRecommendation ? 'recommendation' : this.extractSubject(trimmed);
     const previousContext = await this.getContext(userId);
@@ -155,7 +254,7 @@ export class CieCoachService {
       lastDate: resolvedTodayStr,
     };
 
-    // 4. Gemini Function Selection
+    // 6. Gemini Function Selection
     let selection;
     try {
       selection = await this.geminiFunctionCalling.selectTools(trimmed, resolvedTodayStr);
@@ -167,40 +266,96 @@ export class CieCoachService {
           { name: 'getNutritionTargets', args: {} },
         ]);
         const composedReply = CieResponseComposer.composeCombinedResponse(toolResults, activeContext);
-        return { reply: composedReply };
+        return {
+          reply: composedReply,
+          provenance: {
+            source: 'caltrack_data',
+            label: 'CalTrack Data',
+            details: 'Local database food recommendations',
+          },
+        };
       }
 
       // Graceful fallback to regex intent handler when Gemini is unreachable or rate-limited
-      const fallback = await this.diarySummaryService.tryHandleCoachDiaryIntent(
-        userId,
-        trimmed,
-        dateStr,
-        timeZone,
-      );
-      if (fallback) return fallback;
+      if (this.hasPersonalConsumptionIntent(trimmed) || this.diarySummaryService?.isTodayDiaryQuery?.(trimmed)) {
+        const fallback = await this.diarySummaryService.tryHandleCoachDiaryIntent(
+          userId,
+          trimmed,
+          dateStr,
+          timeZone,
+        );
+        if (fallback) {
+          return {
+            reply: fallback.reply,
+            provenance: {
+              source: 'local_fallback',
+              label: 'Local Fallback',
+              details: 'Local PostgreSQL diary summary fallback',
+            },
+          };
+        }
+      }
 
-      // Safe user-friendly message on complete AI outage
+      // Safe user-friendly message on complete AI outage for non-diary queries
       return {
         reply:
           "I'm temporarily experiencing high demand with external AI services. In the meantime, you can review your live diary on Home or inspect your analytics on the Progress page!",
+        provenance: {
+          source: 'local_fallback',
+          label: 'Local Fallback',
+          details: 'AI service unavailable notice',
+        },
       };
     }
 
-    // 5. If no nutrition tools were requested, check recommendation fallback or return null for standard Coach
-    if (!selection || !selection.hasFunctionCalls || selection.functionCalls.length === 0) {
+    // 7. Filter Inappropriate Tool Calls (e.g. Gemini selecting getDailyNutrition for general food queries)
+    const rawCalls = selection?.functionCalls || [];
+    const hasPersonalIntent = this.hasPersonalConsumptionIntent(trimmed);
+
+    const appropriateCalls = rawCalls.filter((call) => {
+      // Disallow diary/history tools if user query has NO personal consumption intent
+      if (call.name === 'getDailyNutrition' || call.name === 'getFoodHistory') {
+        return hasPersonalIntent;
+      }
+      return true;
+    });
+
+    // 8. If no valid tools remain:
+    if (appropriateCalls.length === 0) {
       if (isRecommendation) {
         const toolResults = await this.toolDispatcher.dispatchBatch(userId, [
           { name: 'getDailyNutrition', args: { date: resolvedTodayStr } },
           { name: 'getNutritionTargets', args: {} },
         ]);
         const composedReply = CieResponseComposer.composeCombinedResponse(toolResults, activeContext);
-        return { reply: composedReply };
+        return {
+          reply: composedReply,
+          provenance: {
+            source: 'caltrack_data',
+            label: 'CalTrack Data',
+            details: 'Grounded Sri Lankan food database recommendations',
+          },
+        };
       }
+
+      // If Gemini provided a helpful direct text response without tool calls, return it
+      if (selection?.rawTextResponse && selection.rawTextResponse.trim().length > 20) {
+        return {
+          reply: selection.rawTextResponse.trim(),
+          provenance: {
+            source: 'gemini',
+            label: 'Gemini AI',
+            details: `Direct response from ${selection.modelUsed}`,
+          },
+        };
+      }
+
+      // Fall through to standard askCoach for expert food nutrition analysis (e.g. "chicken curry", "kottu and prawns stats")
       return null;
     }
 
-    // 6. Normalize Colloquial Model Date Arguments
-    const normalizedCalls: ToolCallRequest[] = selection.functionCalls.map((call) => {
+    // 9. Normalize Colloquial Model Date Arguments
+    const normalizedCalls: ToolCallRequest[] = appropriateCalls.map((call) => {
       const cleanArgs = { ...(call.args || {}) };
 
       if (call.name === 'getDailyNutrition') {
@@ -244,15 +399,24 @@ export class CieCoachService {
       }
     }
 
-    // 7. Execute Tools Under Server-Side Authenticated Identity
+    // 10. Execute Tools Under Server-Side Authenticated Identity
     const toolResults = await this.toolDispatcher.dispatchBatch(userId, normalizedCalls);
 
-    // 8. Update Follow-up Context
+    // 11. Update Follow-up Context
     await this.saveContext(userId, activeContext);
 
-    // 9. Server-Side Deterministic Response Composition
+    // 12. Server-Side Deterministic Response Composition
     const composedReply = CieResponseComposer.composeCombinedResponse(toolResults, activeContext);
 
-    return { reply: composedReply };
+    return {
+      reply: composedReply,
+      provenance: {
+        source: 'caltrack_data',
+        label: 'CalTrack Data',
+        details: isRecommendation
+          ? 'Grounded Sri Lankan food database recommendations'
+          : 'Authenticated PostgreSQL user records',
+      },
+    };
   }
 }

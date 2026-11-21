@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { useAppStore, type MealSlot, type FoodEntry } from "@/store/useAppStore";
-import { postLogMeal, deleteMealEntry, updateMealEntry, type UpdateMealPayload, parseAiPrompt, scanMealImage, fetchWithTimeout } from "@/lib/api";
+import { postLogMeal, deleteMealEntry, updateMealEntry, type UpdateMealPayload, parseAiPrompt, scanMealImage, fetchWithTimeout, type AiProvenance } from "@/lib/api";
 import { MealPlateCard } from "@/components/meal/MealPlateCard";
 import { getLocalDateString } from "@/lib/date";
 import { FormattedText } from "@/components/ui/FormattedText";
@@ -37,6 +37,7 @@ interface AiMessage {
   role: AiRole;
   text: string;
   suggestedFood?: Food;
+  provenance?: AiProvenance;
   errorDetails?: {
     lastPrompt?: string;
   };
@@ -615,6 +616,7 @@ function SearchContent() {
           role: "ai",
           text: res.text,
           suggestedFood: res.suggestedFood,
+          provenance: res.provenance,
         },
       ]);
     } catch (err: any) {
@@ -659,6 +661,7 @@ function SearchContent() {
               role: "ai",
               text: res.text,
               suggestedFood: res.suggestedFood,
+              provenance: res.provenance,
             },
           ]);
         } catch (err: any) {
@@ -1122,14 +1125,30 @@ function SearchContent() {
                 {/* AI-generated ingredient card */}
                 {msg.suggestedFood && (
                   <div className="w-full bg-white rounded-[18px] p-3 border border-[#BACAC5]/20 shadow-sm">
-                    {/* Badge showing AI Estimate */}
+                    {/* Badge showing AI Estimate & Provenance */}
                     <div className="flex items-center justify-between mb-2">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                        <svg className="w-3 h-3 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        AI Estimate (Approximate)
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          <svg className="w-3 h-3 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          AI Estimate (Approximate)
+                        </span>
+                        {msg.provenance && (
+                          <span
+                            title={msg.provenance.details}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              msg.provenance.source === "gemini"
+                                ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                : msg.provenance.source === "caltrack_data"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-gray-100 text-gray-700 border border-gray-200"
+                            }`}
+                          >
+                            ✦ {msg.provenance.label}
+                          </span>
+                        )}
+                      </div>
                       {msg.suggestedFood.portionDescription && (
                         <span className="text-[11px] font-medium text-gray-500">
                           {msg.suggestedFood.portionDescription}
@@ -1175,7 +1194,7 @@ function SearchContent() {
                       Add to Plate
                     </button>
                     <p className="text-[9.5px] text-gray-400 mt-2 text-center">
-                      ⚠️ Values are AI estimates, not scientifically verified data.
+                      ⚠️ Estimates are approximate and not independently verified.
                     </p>
                   </div>
                 )}

@@ -183,6 +183,7 @@ export default function AIChatPage() {
         id: (Date.now() + 1).toString(),
         role: "coach",
         content: res.reply,
+        provenance: res.provenance,
         timestamp: new Date().toLocaleTimeString("en-US", {
           hour: "numeric",
           minute: "2-digit",
@@ -366,6 +367,30 @@ export default function AIChatPage() {
               <div className="bg-white border border-[#BACAC5]/20 p-5 rounded-2xl rounded-tl-sm shadow-sm w-full">
                 <FormattedText text={msg.content} />
               </div>
+
+              {/* Message Provenance Pill */}
+              {msg.provenance && (
+                <div className="flex items-center gap-1.5 px-1 -mt-1">
+                  <span
+                    title={msg.provenance.details}
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide select-none ${
+                      msg.provenance.source === "gemini" || msg.provenance.source === "hybrid"
+                        ? "bg-purple-50 text-purple-700 border border-purple-200/80"
+                        : msg.provenance.source === "caltrack_data"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                        : msg.provenance.source === "local_fallback"
+                        ? "bg-amber-50 text-amber-700 border border-amber-200/80"
+                        : "bg-gray-100 text-gray-700 border border-gray-200/80"
+                    }`}
+                  >
+                    {msg.provenance.source === "gemini" && "✦"}
+                    {msg.provenance.source === "caltrack_data" && "📊"}
+                    {msg.provenance.source === "local_fallback" && "⚡"}
+                    {msg.provenance.source === "caltrack_local" && "⚙"}
+                    <span>{msg.provenance.label}</span>
+                  </span>
+                </div>
+              )}
 
               {/* Optional Rich Snapshot Card */}
               {msg.card === "daily-summary" && (

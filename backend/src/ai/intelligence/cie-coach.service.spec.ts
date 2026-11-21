@@ -995,4 +995,184 @@ describe('CieCoachService & CIE Coach Integration', () => {
     expect(res!.reply).toContain('Chicken Curry');
     expect(res!.reply).not.toContain('You haven\'t configured your nutrition targets yet');
   });
+
+  // --------------------------------------------------------------------------
+  // Test 19: Intercept 30-day / multi-week planning queries (Scope Limitation)
+  // --------------------------------------------------------------------------
+  it('19. should intercept 30-day plan request and return V1 scope limitation with CalTrack Local provenance', async () => {
+    const res = await service.handleCoachMessage(
+      mockUserId,
+      'my 30 day plan',
+      testDateStr,
+      testTimeZone,
+    );
+
+    expect(res).not.toBeNull();
+    expect(res!.reply).toContain('30-day meal planning is deferred to CalTrack Intelligence Engine V2');
+    expect(res!.reply).toContain('CalTrack V1 specializes in real-time daily nutrition tracking');
+    expect(res!.provenance).toEqual(
+      expect.objectContaining({
+        source: 'caltrack_local',
+        label: 'CalTrack Local',
+      }),
+    );
+    // Did NOT call external Gemini tool selector
+    expect(mockGeminiFunctionCalling.selectTools).not.toHaveBeenCalled();
+  });
+
+  // --------------------------------------------------------------------------
+  // Test 20: Intercept profile overview queries ("tell me about myself")
+  // --------------------------------------------------------------------------
+  it('20. should intercept "tell me about myself" and return profile targets overview with CalTrack Data provenance', async () => {
+    mockToolDispatcher.dispatchBatch.mockResolvedValue([
+      {
+        tool: 'getNutritionTargets',
+        callId: 'targets-profile',
+        success: true,
+        data: {
+          targetCalories: 2200,
+          targetProteinG: 140,
+          targetCarbsG: 250,
+          targetFatG: 70,
+          goal: 'GAIN',
+          currentWeightKg: 68,
+          targetWeightKg: 75,
+        },
+      },
+    ]);
+
+    const res = await service.handleCoachMessage(
+      mockUserId,
+      'tell me about myself',
+      testDateStr,
+      testTimeZone,
+    );
+
+    expect(res).not.toBeNull();
+    expect(res!.reply).toContain('Here is an overview of your CalTrack profile and nutrition targets:');
+    expect(res!.reply).toContain('2,200 kcal');
+    expect(res!.reply).toContain('140g');
+    expect(res!.reply).toContain('Weight / Muscle Gain (GAIN)');
+    expect(res!.provenance).toEqual(
+      expect.objectContaining({
+        source: 'caltrack_data',
+        label: 'CalTrack Data',
+      }),
+    );
+  });
+
+  // --------------------------------------------------------------------------
+  // Test 21: Inappropriate Gemini tool selection guard ("chicken curry")
+  // --------------------------------------------------------------------------
+  it('21. should filter out getDailyNutrition for general food query lacking personal intent ("chicken curry")', async () => {
+    // Simulate Gemini erroneously selecting getDailyNutrition for "chicken curry"
+    mockGeminiFunctionCalling.selectTools.mockResolvedValue({
+      prompt: 'chicken curry',
+      hasFunctionCalls: true,
+      functionCalls: [
+        { name: 'getDailyNutrition', args: { date: 'today' }, callId: 'err-tool' },
+      ],
+      modelUsed: 'gemini-3.5-flash-lite',
+    });
+
+    const res = await service.handleCoachMessage(
+      mockUserId,
+      'chicken curry',
+      testDateStr,
+      testTimeZone,
+    );
+
+    // Filtered out getDailyNutrition -> returned null to fall through to standard Gemini food coach
+    expect(res).toBeNull();
+    // Verified dispatcher was NOT called with getDailyNutrition
+    expect(mockToolDispatcher.dispatchBatch).not.toHaveBeenCalled();
+  });
+
+  // --------------------------------------------------------------------------
+  // Test 22: Authentic personal diary query ("how much protein did I eat today")
+  // --------------------------------------------------------------------------
+  it('22. should execute getDailyNutrition and return CalTrack Data provenance for personal diary query', async () => {
+    mockGeminiFunctionCalling.selectTools.mockResolvedValue({
+      prompt: 'how much protein did I eat today',
+      hasFunctionCalls: true,
+      functionCalls: [
+        { name: 'getDailyNutrition', args: { date: testDateStr }, callId: 'diary-p' },
+      ],
+      modelUsed: 'deterministic-fast-path',
+    });
+
+    mockToolDispatcher.dispatchBatch.mockResolvedValue([
+      {
+        tool: 'getDailyNutrition',
+        callId: 'diary-p',
+        success: true,
+        data: {
+          date: testDateStr,
+          totalCalories: 850,
+          totalProtein: 62.5,
+          totalCarbs: 85,
+          totalFat: 24,
+          meals: [
+            {
+              slot: 'lunch',
+              slotCalories: 850,
+              items: [{ name: 'Chicken and Rice', serving: '1 plate', calories: 850, protein: 62.5, carbs: 85, fat: 24 }],
+            },
+          ],
+          isLogged: true,
+        },
+      },
+    ]);
+
+    const res = await service.handleCoachMessage(
+      mockUserId,
+      'how much protein did I eat today',
+      testDateStr,
+      testTimeZone,
+    );
+
+    expect(res).not.toBeNull();
+    expect(res!.reply).toContain('62.5g');
+    expect(res!.reply).toContain('Chicken and Rice');
+    expect(res!.provenance).toEqual(
+      expect.objectContaining({
+        source: 'caltrack_data',
+        label: 'CalTrack Data',
+      }),
+    );
+  });
+
+  // --------------------------------------------------------------------------
+  // Test 23: Outage / Fallback provenance handling
+  // --------------------------------------------------------------------------
+  it('23. should return Local Fallback provenance when Gemini selection throws on personal diary query', async () => {
+    mockGeminiFunctionCalling.selectTools.mockRejectedValue(
+      new Error('Gemini API 503 high demand spike'),
+    );
+
+    mockDiarySummaryService.tryHandleCoachDiaryIntent.mockResolvedValue({
+      reply: 'Here is what you logged today: 1,200 kcal.',
+      provenance: {
+        source: 'caltrack_data',
+        label: 'CalTrack Data',
+        details: 'Authenticated PostgreSQL user records',
+      },
+    });
+
+    const res = await service.handleCoachMessage(
+      mockUserId,
+      'what did I eat today',
+      testDateStr,
+      testTimeZone,
+    );
+
+    expect(res).not.toBeNull();
+    expect(res!.reply).toContain('Here is what you logged today: 1,200 kcal.');
+    expect(res!.provenance).toEqual(
+      expect.objectContaining({
+        source: 'local_fallback',
+        label: 'Local Fallback',
+      }),
+    );
+  });
 });

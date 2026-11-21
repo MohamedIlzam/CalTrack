@@ -58,6 +58,11 @@ export interface CoachChatMessage {
   content: string;
   timestamp: string;
   card?: "daily-summary" | null;
+  provenance?: {
+    source: 'gemini' | 'caltrack_data' | 'caltrack_local' | 'local_fallback' | 'hybrid';
+    label: string;
+    details?: string;
+  };
   errorDetails?: {
     errorMessage: string;
     lastPrompt: string;

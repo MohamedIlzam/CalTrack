@@ -60,13 +60,16 @@ export class GeminiFunctionCallingService {
     return (
       status === 503 ||
       status === 429 ||
+      status === 408 ||
       msg.includes('503') ||
       msg.includes('429') ||
       msg.includes('unavailable') ||
       msg.includes('high demand') ||
       msg.includes('resource_exhausted') ||
       msg.includes('spikes in demand') ||
-      msg.includes('too many requests')
+      msg.includes('too many requests') ||
+      msg.includes('timed out') ||
+      msg.includes('timeout')
     );
   }
 
@@ -145,10 +148,11 @@ export class GeminiFunctionCallingService {
   ): ToolCallRequest[] | null {
     const clean = prompt.toLowerCase().trim();
 
-    // 1. Explicit target queries
+    // 1. Explicit target and profile overview queries
     if (
       /\b(what\s+(are|is)\s+my\s+(daily\s+)?(calorie\s+|macro\s+|nutrition\s+)?(targets?|goals?))\b/i.test(clean) ||
       /\b(my\s+(daily\s+)?(calorie|macro|nutrition)\s+(targets?|goals?))\b/i.test(clean) ||
+      /\b(tell\s+me\s+about\s+myself|who\s+am\s+i|about\s+me|my\s+profile|show\s+my\s+profile)\b/i.test(clean) ||
       /^(what\s+is\s+my\s+daily\s+calorie\s+target\??)$/i.test(clean) ||
       /^(what\s+are\s+my\s+nutrition\s+targets\??)$/i.test(clean) ||
       /^(show\s+my\s+targets\??)$/i.test(clean)
@@ -233,13 +237,15 @@ export class GeminiFunctionCallingService {
 
       const systemInstruction = `You are the CalTrack Nutrition Assistant.
 Current Local Date: ${currentDateStr}
-You have access to read-only nutrition tools:
-1. getDailyNutrition(date: string YYYY-MM-DD): for questions about what was eaten or macro totals on a specific date.
-2. getNutritionTargets(): for questions about calorie targets, macro goals (protein, carbs, fat), or fitness goals.
-3. getFoodHistory(days: number 1-7, endDate?: string): for questions about multi-day trends or eating consistency over recent days.
+You have access to read-only nutrition tools ONLY for querying authenticated user personal records:
+1. getDailyNutrition(date: string YYYY-MM-DD): ONLY for personal inquiries about what the authenticated user ate or logged, or their daily macro totals (e.g. "what did I eat today", "how much protein did I have", "my diary"). NEVER use for general food nutrition, recipes, dish calories, or ingredient inquiries (e.g. "chicken curry", "kottu and prawns stats", "banana calories").
+2. getNutritionTargets(): for questions about the user's personal calorie targets, macro goals (protein, carbs, fat), fitness goals, or profile info (e.g. "what are my goals", "tell me about myself").
+3. getFoodHistory(days: number 1-7, endDate?: string): for questions about past eating consistency or multi-day history over the last 1 to 7 days. NEVER use for future plans (e.g. "30 day plan").
 
-When answering nutrition, food, or goal inquiries, select the appropriate tool(s) from functionDeclarations.
-Do NOT attempt to guess or hallucinate diary data without calling the tools.`;
+CRITICAL TOOL CALLING RULES:
+- If the user is asking about general food, dishes, ingredients, recipes, or nutritional facts without referring to their own personal logged diary (e.g. "chicken curry", "kottu and prawns stats", "chicken curry and rice calories"), DO NOT call any tool! Leave function calls empty and provide an educational nutrition response directly in text.
+- If the user asks for a future diet plan or multi-week / 30-day plan, DO NOT call getFoodHistory. Leave function calls empty.
+- Select tools ONLY when the user is explicitly inquiring about their own authenticated personal records, targets, or past logged history.`;
 
       let response: any;
       let usedModel = this.modelName;

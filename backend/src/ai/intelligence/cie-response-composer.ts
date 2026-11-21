@@ -14,8 +14,9 @@ import {
 import { DispatchedToolResult } from './tool-dispatcher.service';
 
 export interface CieConversationContext {
-  lastSubject?: 'protein' | 'calories' | 'carbs' | 'fat' | 'history' | 'targets' | 'meals' | 'recommendation';
+  lastSubject?: 'protein' | 'calories' | 'carbs' | 'fat' | 'history' | 'targets' | 'meals' | 'recommendation' | 'profile';
   isRecommendation?: boolean;
+  isProfile?: boolean;
   lastDate?: string;
   updatedAt?: number;
 }
@@ -181,6 +182,55 @@ export class CieResponseComposer {
 
     lines.push('');
     lines.push('You can adjust your calorie and macronutrient targets anytime in **Profile** settings.');
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Composes response for general profile inquiries (e.g. "tell me about myself", "who am I").
+   * Provides a comprehensive overview of user targets, weight journey, and fitness goals.
+   */
+  public static composeProfileOverview(targets?: NutritionTargetsResult | null): string {
+    if (!targets || (!targets.targetCalories && !targets.targetProteinG && !targets.goal)) {
+      return (
+        "You haven't set up your nutrition profile yet.\n\n" +
+        'Head over to **Profile settings** to set your daily calorie budget, macronutrient targets (protein, carbs, fat), and fitness goal!'
+      );
+    }
+
+    const lines: string[] = [];
+    lines.push('Here is an overview of your CalTrack profile and nutrition targets:');
+    lines.push('');
+
+    if (targets.goal) {
+      const goalDisplay =
+        targets.goal === 'LOSE'
+          ? 'Weight Loss (LOSE)'
+          : targets.goal === 'GAIN'
+          ? 'Weight / Muscle Gain (GAIN)'
+          : 'Weight Maintenance (MAINTAIN)';
+      lines.push(`* **Fitness Goal:** ${goalDisplay}`);
+    }
+    if (targets.currentWeightKg && targets.targetWeightKg) {
+      lines.push(
+        `* **Weight Journey:** Current **${targets.currentWeightKg} kg** (Target: **${targets.targetWeightKg} kg**)`,
+      );
+    }
+    if (targets.targetCalories) {
+      lines.push(`* **Daily Calorie Target:** **${targets.targetCalories.toLocaleString()} kcal**`);
+    }
+    if (targets.targetProteinG) {
+      lines.push(`* **Protein Target:** **${targets.targetProteinG}g**`);
+    }
+    if (targets.targetCarbsG) {
+      lines.push(`* **Carbohydrate Target:** **${targets.targetCarbsG}g**`);
+    }
+    if (targets.targetFatG) {
+      lines.push(`* **Healthy Fat Target:** **${targets.targetFatG}g**`);
+    }
+
+    lines.push('');
+    lines.push('You can update your personal goals or macro distribution anytime in **Profile** settings.');
 
     return lines.join('\n');
   }
@@ -354,6 +404,11 @@ export class CieResponseComposer {
     // Recommendation Intent: Provide grounded suggestions instead of repeating diary statistics
     if (context?.isRecommendation) {
       return this.composeRecommendationResponse(dailyRes, targetsRes, context);
+    }
+
+    // Profile Intent: Return dedicated profile targets and fitness journey overview
+    if (context?.isProfile || context?.lastSubject === 'profile') {
+      return this.composeProfileOverview(targetsRes);
     }
 
     // Check for combined: Daily + Targets (e.g. remaining calories or remaining protein)

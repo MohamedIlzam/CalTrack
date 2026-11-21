@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveDiaryDate } from '../common/date.util';
+import {
+  AiProvenance,
+  PROVENANCE_CALTRACK_DATA,
+  PROVENANCE_CALTRACK_LOCAL,
+} from './provenance.types';
 
 export interface TodayNutritionSummary {
   dateStr: string;
@@ -250,12 +255,17 @@ export class DiarySummaryService {
     message: string,
     dateStr?: string,
     timeZone?: string,
-  ): Promise<{ reply: string } | null> {
+  ): Promise<{ reply: string; provenance: AiProvenance } | null> {
     // 1. Check if user is asking an unsupported multi-day historical question
     if (this.isHistoricalDiaryQuery(message)) {
       return {
         reply:
           "I can review your logged meals and macro totals for today! Detailed multi-day historical reporting is coming in V2. To inspect earlier dates, you can browse your Progress page or change the date on your Home diary.",
+        provenance: {
+          source: 'caltrack_local',
+          label: 'CalTrack Local',
+          details: 'Scope limitation notice',
+        },
       };
     }
 
@@ -270,6 +280,11 @@ export class DiarySummaryService {
     if (summary.meals.length === 0) {
       return {
         reply: `You haven't logged any meals yet for today (**${summary.dateStr}**).\n\nHead over to Search or Home to log your breakfast, lunch, dinner, or snacks, and I'll keep track of your daily calories and macros!`,
+        provenance: {
+          source: 'caltrack_data',
+          label: 'CalTrack Data',
+          details: 'Authenticated PostgreSQL user records',
+        },
       };
     }
 
@@ -312,6 +327,13 @@ export class DiarySummaryService {
     lines.push('');
     lines.push("You're making great progress today! Let me know if you need meal suggestions or advice for your remaining macros.");
 
-    return { reply: lines.join('\n') };
+    return {
+      reply: lines.join('\n'),
+      provenance: {
+        source: 'caltrack_data',
+        label: 'CalTrack Data',
+        details: 'Authenticated PostgreSQL user records',
+      },
+    };
   }
 }

@@ -391,6 +391,19 @@ export async function updateUserProfile(payload: Partial<UserProfile>): Promise<
   return res.json();
 }
 
+export type AiProvenanceSource =
+  | 'gemini'
+  | 'caltrack_data'
+  | 'caltrack_local'
+  | 'local_fallback'
+  | 'hybrid';
+
+export interface AiProvenance {
+  source: AiProvenanceSource;
+  label: string;
+  details?: string;
+}
+
 export interface AiFoodSuggestion {
   id: string;
   name: string;
@@ -408,6 +421,7 @@ export interface AiFoodSuggestion {
 export interface AiParseResponse {
   text: string;
   suggestedFood?: AiFoodSuggestion;
+  provenance?: AiProvenance;
 }
 
 export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
@@ -431,7 +445,12 @@ export async function parseAiPrompt(prompt: string): Promise<AiParseResponse> {
   return res.json();
 }
 
-export async function sendCoachChat(message: string, date?: string): Promise<{ reply: string }> {
+export interface CoachChatResponse {
+  reply: string;
+  provenance?: AiProvenance;
+}
+
+export async function sendCoachChat(message: string, date?: string): Promise<CoachChatResponse> {
   const token = getAuthToken();
   const baseUrl = getApiBaseUrl();
   const timeZone = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Asia/Colombo';
