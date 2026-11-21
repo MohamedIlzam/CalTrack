@@ -1,0 +1,87 @@
+name: CalTrack CI
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - 'feat/**'
+      - 'fix/**'
+      - 'chore/**'
+  pull_request:
+    branches:
+      - main
+      - dev
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (NestJS, Prisma, Jest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Type-check TypeScript (production config)
+        run: npx tsc -p tsconfig.build.json --noEmit
+
+      - name: Run backend unit and regression tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/caltrack_test?schema=public"
+          JWT_SECRET: "ci-mock-jwt-secret-key-32-characters-minimum"
+          GEMINI_API_KEY: "ci-mock-gemini-key"
+          REDIS_URL: "redis://localhost:6379"
+
+      - name: Build NestJS production bundle
+        run: npm run build
+
+  frontend:
+    name: Frontend (Next.js 16, TypeScript, Tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check TypeScript
+        run: npx tsc --noEmit
+
+      - name: Run frontend unit and regression tests
+        run: npm test
+
+      - name: Build Next.js production bundle
+        run: npm run build
