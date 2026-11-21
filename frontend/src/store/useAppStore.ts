@@ -50,6 +50,24 @@ interface DailyLogState {
   entries: FoodEntry[];
 }
 
+/* ─────────────── AI Coach chat slice ─────────────── */
+
+export interface CoachChatMessage {
+  id: string;
+  role: "user" | "coach" | "error";
+  content: string;
+  timestamp: string;
+  card?: "daily-summary" | null;
+  errorDetails?: {
+    errorMessage: string;
+    lastPrompt: string;
+  };
+}
+
+interface CoachChatState {
+  coachMessages: CoachChatMessage[];
+}
+
 /* ─────────────── Actions ─────────────── */
 
 interface Actions {
@@ -59,13 +77,17 @@ interface Actions {
   updateFoodEntry: (id: string, updated: Partial<FoodEntry>) => void;
   removeFoodEntry: (id: string) => void;
   clearEntries: () => void;
+  setCoachMessages: (
+    messages: CoachChatMessage[] | ((prev: CoachChatMessage[]) => CoachChatMessage[])
+  ) => void;
+  clearCoachMessages: () => void;
   setAuth: (token: string, user: any) => void;
   logout: () => void;
 }
 
 /* ─────────────── Store ─────────────── */
 
-interface AppStore extends OnboardingState, DailyLogState, Actions {}
+interface AppStore extends OnboardingState, DailyLogState, CoachChatState, Actions {}
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -88,6 +110,9 @@ export const useAppStore = create<AppStore>()(
       // Daily log defaults
       entries: [],
 
+      // AI Coach chat defaults
+      coachMessages: [],
+
       // Actions
       setOnboarding: (data) => set((state) => ({ ...state, ...data })),
 
@@ -105,6 +130,14 @@ export const useAppStore = create<AppStore>()(
         set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),
 
       clearEntries: () => set({ entries: [] }),
+
+      setCoachMessages: (messages) =>
+        set((state) => ({
+          coachMessages:
+            typeof messages === "function" ? messages(state.coachMessages) : messages,
+        })),
+
+      clearCoachMessages: () => set({ coachMessages: [] }),
 
       setAuth: (token, user) => set((state) => {
         const isDifferentUser = !state.email || state.email !== user.email;
@@ -124,6 +157,7 @@ export const useAppStore = create<AppStore>()(
           targetFatG: user.targetFatG || state.targetFatG,
           hasOnboarded: true,
           entries: isDifferentUser ? [] : state.entries,
+          coachMessages: isDifferentUser ? [] : state.coachMessages,
         };
       }),
 
@@ -146,6 +180,7 @@ export const useAppStore = create<AppStore>()(
           targetCarbsG: 0,
           targetFatG: 0,
           entries: [],
+          coachMessages: [],
         });
       },
     }),

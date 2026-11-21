@@ -5,22 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { sendCoachChat, fetchUserProfile } from "@/lib/api";
-import { useAppStore } from "@/store/useAppStore";
+import { useAppStore, type CoachChatMessage } from "@/store/useAppStore";
 import { FormattedText, renderSafeInline } from "@/components/ui/FormattedText";
 
 export { FormattedText, renderSafeInline };
 
-export type Message = {
-  id: string;
-  role: "user" | "coach" | "error";
-  content: string;
-  timestamp: string;
-  card?: "daily-summary" | null;
-  errorDetails?: {
-    errorMessage: string;
-    lastPrompt: string;
-  };
-};
+export type Message = CoachChatMessage;
 
 const SUGGESTION_CHIPS = [
   "Dinner ideas under 500 kcal",
@@ -119,6 +109,10 @@ export default function AIChatPage() {
 
   const targetKcal = profile?.targetCalories ?? (storeTargetKcal || 2000);
 
+  const storeMessages = useAppStore((s) => s.coachMessages);
+  const setStoreMessages = useAppStore((s) => s.setCoachMessages);
+  const clearCoachMessages = useAppStore((s) => s.clearCoachMessages);
+
   const initialWelcome = React.useMemo<Message>(() => ({
     id: "welcome",
     role: "coach",
@@ -127,7 +121,21 @@ export default function AIChatPage() {
     card: "daily-summary",
   }), [userName, consumedKcal, targetKcal]);
 
-  const [messages, setMessages] = useState<Message[]>([initialWelcome]);
+  // Preserve chat history across bottom navigation tab switches (Search, Progress, Home)
+  const messages = React.useMemo<Message[]>(() => {
+    if (!storeMessages || storeMessages.length === 0) {
+      return [initialWelcome];
+    }
+    // If first message was welcome message, keep its live snapshot updated
+    if (storeMessages[0]?.id === "welcome") {
+      return [
+        { ...storeMessages[0], content: initialWelcome.content, timestamp: initialWelcome.timestamp },
+        ...storeMessages.slice(1),
+      ];
+    }
+    return storeMessages;
+  }, [storeMessages, initialWelcome]);
+
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -163,7 +171,9 @@ export default function AIChatPage() {
       timestamp: timeStr,
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    // If store is empty, include initialWelcome before userMsg so conversation context is preserved
+    const baseHistory = storeMessages && storeMessages.length > 0 ? storeMessages : [initialWelcome];
+    setStoreMessages([...baseHistory, userMsg]);
     setInput("");
     setIsThinking(true);
 
@@ -179,7 +189,7 @@ export default function AIChatPage() {
           hour12: true,
         }),
       };
-      setMessages((prev) => [...prev, coachMsg]);
+      setStoreMessages((prev) => [...prev, coachMsg]);
     } catch (err: any) {
       console.warn("Coach chat error (handled):", err?.message || err);
       const errMsg = err?.message || "Unable to reach CalTrack AI. Please check your connection or try again.";
@@ -197,14 +207,14 @@ export default function AIChatPage() {
           lastPrompt: text,
         },
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      setStoreMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsThinking(false);
     }
   };
 
   const handleClearChat = () => {
-    setMessages([initialWelcome]);
+    clearCoachMessages();
     setInput("");
   };
 
