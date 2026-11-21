@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { parseAiPrompt } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Food {
@@ -55,42 +56,6 @@ const FOOD_DB: Food[] = [
   { id: "coconut-milk",  name: "Coconut Milk",       kcalPerServing: 110, proteinPerServing: 1,   carbsPerServing: 3,    fatPerServing: 11,  emoji: "🥛", chipColor: "#E0F0E8" },
   { id: "watalappam",    name: "Watalappam",         kcalPerServing: 210, proteinPerServing: 4,   carbsPerServing: 28,   fatPerServing: 9,   emoji: "🍮", chipColor: "#8B4513" },
 ];
-
-// ─── Mock AI ingredient generator ─────────────────────────────────────────────
-// TODO: Replace with a real Claude / Supabase Edge Function call.
-function generateFoodFromDescription(desc: string): Food {
-  const lower = desc.toLowerCase();
-  let base = { kcal: 150, p: 8, c: 15, f: 6 };
-  if (/rice|bath|kiri/.test(lower))            base = { kcal: 150, p: 3,  c: 32, f: 1  };
-  else if (/curry|kulambu|gravy/.test(lower))  base = { kcal: 165, p: 11, c: 12, f: 8  };
-  else if (/sambol|mallung|salad/.test(lower)) base = { kcal: 60,  p: 2,  c: 8,  f: 3  };
-  else if (/roti|bread|hopper/.test(lower))    base = { kcal: 140, p: 4,  c: 25, f: 4  };
-  else if (/chicken|beef|pork|lamb/.test(lower)) base = { kcal: 210, p: 24, c: 2,  f: 11 };
-  else if (/fish|prawn|crab/.test(lower))      base = { kcal: 160, p: 20, c: 3,  f: 7  };
-  else if (/egg/.test(lower))                  base = { kcal: 80,  p: 6,  c: 1,  f: 5  };
-  else if (/fruit|mango|banana|papaya/.test(lower)) base = { kcal: 75, p: 1, c: 18, f: 0.3 };
-
-  const jitter = (n: number, range: number) =>
-    Math.max(0, Math.round(n + (Math.random() - 0.5) * range));
-
-  const name = desc.trim().replace(/\b\w/g, (c) => c.toUpperCase());
-  const palettes: Array<[string, string]> = [
-    ["🥘", "#006B5F"], ["🍲", "#E8A020"], ["🫕", "#C45C1A"],
-    ["🍽️", "#2C7A45"], ["🥗", "#D4763A"],
-  ];
-  const [emoji, chipColor] = palettes[Math.floor(Math.random() * palettes.length)];
-
-  return {
-    id: `ai-${Date.now()}`,
-    name,
-    kcalPerServing:    jitter(base.kcal, 20),
-    proteinPerServing: jitter(base.p, 4),
-    carbsPerServing:   jitter(base.c, 6),
-    fatPerServing:     jitter(base.f, 3),
-    emoji,
-    chipColor,
-  };
-}
 
 // ─── Shared Stepper ───────────────────────────────────────────────────────────
 function Stepper({ qty, onIncrease, onDecrease }: {
@@ -182,7 +147,7 @@ export function BuildCustomMealModal({ isOpen, onClose }: BuildCustomMealModalPr
     setPlateItems((prev) => {
       const ex = prev.find((i) => i.id === food.id);
       if (ex) return prev.map((i) => i.id === food.id ? { ...i, qty: Math.round((i.qty + 0.5) * 2) / 2 } : i);
-      return [...prev, { ...food, qty: 0.5 }];
+      return [...prev, { ...food, qty: 1 }];
     });
   }
   function handleDecrease(food: Food) {
@@ -213,7 +178,7 @@ export function BuildCustomMealModal({ isOpen, onClose }: BuildCustomMealModalPr
     setTimeout(() => aiInputRef.current?.focus(), 350);
   }
 
-  function sendAiMessage() {
+  async function sendAiMessage() {
     const text = aiInput.trim();
     if (!text || aiThinking) return;
 
@@ -222,25 +187,26 @@ export function BuildCustomMealModal({ isOpen, onClose }: BuildCustomMealModalPr
     setAiInput("");
     setAiThinking(true);
 
-    // TODO: replace with real API call (Claude / Supabase Edge Function)
-    setTimeout(() => {
-      const food = generateFoodFromDescription(text);
+    try {
+      const result = await parseAiPrompt(text);
       setAiMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
           role: "ai",
-          text: `Here's my best estimate for **${food.name}**. Tap "Add to Plate" to include it — it'll also be saved to your personal food library.`,
-          suggestedFood: food,
+          text: result.text,
+          suggestedFood: result.suggestedFood,
         },
       ]);
+    } catch (error: any) {
+      setAiMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: "ai", text: error?.message || "Could not estimate this food. Please try again." }]);
+    } finally {
       setAiThinking(false);
-    }, 1600);
+    }
   }
 
   function addAiFoodToPlate(food: Food) {
     handleIncrease(food);
-    // TODO: save to Supabase food library here
     setAiOpen(false);
   }
 

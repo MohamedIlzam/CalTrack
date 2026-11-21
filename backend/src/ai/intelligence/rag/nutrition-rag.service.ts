@@ -17,6 +17,7 @@ import {
   RagSearchOptions,
 } from './nutrition-rag.types';
 import { CURATED_NUTRITION_KNOWLEDGE } from './nutrition-knowledge-data';
+import { getSharedMiniLmPipeline } from '../../../common/local-embedding';
 
 @Injectable()
 export class NutritionRagService implements OnModuleInit {
@@ -35,8 +36,7 @@ export class NutritionRagService implements OnModuleInit {
   async onModuleInit() {
     this.logger.log('Initializing local MiniLM embedding pipeline for Nutrition RAG...');
     try {
-      const { pipeline } = await import('@xenova/transformers');
-      this.generateEmbedding = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+      this.generateEmbedding = await getSharedMiniLmPipeline();
       this.logger.log('Nutrition RAG local embedding pipeline ready (all-MiniLM-L6-v2, 384 dims)');
     } catch (err: any) {
       this.logger.warn(`Failed to preload local embedding pipeline on init: ${err.message}`);
@@ -48,8 +48,7 @@ export class NutritionRagService implements OnModuleInit {
    */
   private async ensurePipeline(): Promise<any> {
     if (!this.generateEmbedding) {
-      const { pipeline } = await import('@xenova/transformers');
-      this.generateEmbedding = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+      this.generateEmbedding = await getSharedMiniLmPipeline();
     }
     return this.generateEmbedding;
   }

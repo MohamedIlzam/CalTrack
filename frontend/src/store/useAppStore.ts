@@ -59,9 +59,12 @@ export interface CoachChatMessage {
   timestamp: string;
   card?: "daily-summary" | null;
   provenance?: {
-    source: 'gemini' | 'caltrack_data' | 'caltrack_local' | 'local_fallback' | 'hybrid';
+    source: 'gemini' | 'caltrack_data' | 'caltrack_local' | 'local_fallback' | 'rag' | 'hybrid';
     label: string;
     details?: string;
+    responseAuthor?: 'gemini' | 'caltrack_local';
+    factualSources?: string[];
+    citations?: Array<{ title: string; url: string; provenance?: string }>;
   };
   errorDetails?: {
     errorMessage: string;

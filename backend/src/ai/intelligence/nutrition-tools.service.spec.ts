@@ -19,6 +19,8 @@ describe('NutritionToolsService (CIE Read-Only Nutrition Foundation)', () => {
       create?: jest.Mock;
       update?: jest.Mock;
     };
+    food: { findMany: jest.Mock };
+    weightEntry: { findMany: jest.Mock };
   };
   let diarySummaryService: DiarySummaryService;
 
@@ -31,6 +33,8 @@ describe('NutritionToolsService (CIE Read-Only Nutrition Foundation)', () => {
         findUnique: jest.fn(),
         findMany: jest.fn(),
       },
+      food: { findMany: jest.fn() },
+      weightEntry: { findMany: jest.fn() },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -43,6 +47,29 @@ describe('NutritionToolsService (CIE Read-Only Nutrition Foundation)', () => {
 
     service = module.get<NutritionToolsService>(NutritionToolsService);
     diarySummaryService = module.get<DiarySummaryService>(DiarySummaryService);
+  });
+
+  describe('Expanded bounded read-only tools', () => {
+    it('looks up catalog nutrition and converts per-100g values to the standard serving', async () => {
+      prisma.food.findMany.mockResolvedValue([{
+        id: 'food-1', name: 'Prawn Kottu', category: 'Rice & Bread', isVerified: true,
+        caloriesKcal: 200, proteinG: 10, carbohydratesG: 25, fatG: 6,
+        unitConversions: [{ unitName: 'plate', gramEquivalent: 300, isStandard: true }],
+      }]);
+      const result = await service.lookupFoods('user-a', { query: 'prawn kottu' });
+      expect(result.foods[0]).toEqual(expect.objectContaining({ name: 'Prawn Kottu', calories: 600, protein: 30, servingDescription: '1 plate' }));
+      expect(prisma.food.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5 }));
+    });
+
+    it('isolates weight progress by authenticated user identity', async () => {
+      prisma.weightEntry.findMany.mockResolvedValue([
+        { recordedAt: new Date('2026-10-01T00:00:00Z'), weightKg: 70 },
+        { recordedAt: new Date('2026-11-01T00:00:00Z'), weightKg: 68.5 },
+      ]);
+      const result = await service.getWeightProgress('user-alpha', { days: 90 });
+      expect(result.changeKg).toBe(-1.5);
+      expect(prisma.weightEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: 'user-alpha' }) }));
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -310,18 +337,15 @@ describe('NutritionToolsService (CIE Read-Only Nutrition Foundation)', () => {
       );
     });
 
-    it('5b. History days limit must be an integer between 1 and 7 for V1', async () => {
-      // Out of bounds (< 1 or > 7)
+    it('5b. History days limit must be an integer between 1 and 30 for bounded V1 summaries', async () => {
+      // Out of bounds (< 1 or > 30)
       await expect(service.getFoodHistory('user-alpha', { days: 0 })).rejects.toThrow(
         BadRequestException,
       );
       await expect(service.getFoodHistory('user-alpha', { days: -5 })).rejects.toThrow(
         BadRequestException,
       );
-      await expect(service.getFoodHistory('user-alpha', { days: 8 })).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.getFoodHistory('user-alpha', { days: 30 })).rejects.toThrow(
+      await expect(service.getFoodHistory('user-alpha', { days: 31 })).rejects.toThrow(
         BadRequestException,
       );
 

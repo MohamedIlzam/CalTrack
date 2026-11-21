@@ -25,6 +25,11 @@ interface Food {
   portionDescription?: string;
   isEstimate?: boolean;
   isVerified?: boolean;
+  servingGrams?: number;
+  confidence?: 'low' | 'medium' | 'high';
+  assumptions?: string[];
+  suggestedQuantity?: number;
+  sourceKind?: 'gemini_estimate';
 }
 
 interface PlateItem extends Food {
@@ -116,42 +121,6 @@ const fetchFoods = async (q: string): Promise<Food[]> => {
   });
 };
 
-// ─── Mock AI ingredient generator ─────────────────────────────────────────────
-function generateFoodFromDescription(desc: string): Food {
-  const lower = desc.toLowerCase();
-  let base = { kcal: 150, p: 8, c: 15, f: 6 };
-  if (/rice|bath|kiri/.test(lower))             base = { kcal: 150, p: 3,  c: 32, f: 1  };
-  else if (/curry|kulambu|gravy/.test(lower))   base = { kcal: 165, p: 11, c: 12, f: 8  };
-  else if (/sambol|mallung|salad/.test(lower))  base = { kcal: 60,  p: 2,  c: 8,  f: 3  };
-  else if (/roti|bread|hopper/.test(lower))     base = { kcal: 140, p: 4,  c: 25, f: 4  };
-  else if (/chicken|beef|pork|lamb/.test(lower)) base = { kcal: 210, p: 24, c: 2,  f: 11 };
-  else if (/fish|prawn|crab/.test(lower))       base = { kcal: 160, p: 20, c: 3,  f: 7  };
-  else if (/egg/.test(lower))                   base = { kcal: 80,  p: 6,  c: 1,  f: 5  };
-  else if (/fruit|mango|banana|papaya/.test(lower)) base = { kcal: 75, p: 1, c: 18, f: 0.3 };
-
-  const jitter = (n: number, range: number) =>
-    Math.max(0, Math.round(n + (Math.random() - 0.5) * range));
-
-  const name = desc.trim().replace(/\b\w/g, (c) => c.toUpperCase());
-  const palettes: Array<[string, string]> = [
-    ["🥘", "#006B5F"], ["🍲", "#E8A020"], ["🫕", "#C45C1A"],
-    ["🍽️", "#2C7A45"], ["🥗", "#D4763A"],
-  ];
-  const [emoji, chipColor] = palettes[Math.floor(Math.random() * palettes.length)];
-
-  return {
-    id: `ai-${Date.now()}`,
-    name,
-    kcalPerServing:    jitter(base.kcal, 20),
-    proteinPerServing: jitter(base.p, 4),
-    carbsPerServing:   jitter(base.c, 6),
-    fatPerServing:     jitter(base.f, 3),
-    emoji,
-    chipColor,
-    category: "Custom",
-  };
-}
-
 // ─── Stepper Component ────────────────────────────────────────────────────────
 function Stepper({ qty, onIncrease, onDecrease }: {
   qty: number; onIncrease: () => void; onDecrease: () => void;
@@ -208,6 +177,7 @@ function SearchContent() {
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiInput, setAiInput] = useState("");
   const [aiThinking, setAiThinking] = useState(false);
+  const [aiServingQuantities, setAiServingQuantities] = useState<Record<string, number>>({});
 
   // ── Refs ──────────────────────────────────────────────────────────────────────
   const searchRef = useRef<HTMLInputElement>(null);
@@ -430,7 +400,7 @@ function SearchContent() {
           foodId: item.id.startsWith('ai-') || item.id.startsWith('custom-') ? undefined : item.id,
           servingQuantity: item.qty,
           unitName: unitNamePayload,
-          loggedWeightGrams: item.qty * 100,
+          loggedWeightGrams: item.qty * (item.servingGrams || 100),
           loggedCaloriesKcal: kcal,
           loggedProteinG: protein,
           loggedCarbohydratesG: carbs,
@@ -523,7 +493,7 @@ function SearchContent() {
         meal: apiMeal,
         servingQuantity: item.qty,
         unitName: unitNamePayload,
-        loggedWeightGrams: item.qty * 100,
+        loggedWeightGrams: item.qty * (item.servingGrams || 100),
         loggedCaloriesKcal: kcal,
         loggedProteinG: protein,
         loggedCarbohydratesG: carbs,
@@ -685,8 +655,13 @@ function SearchContent() {
     }
   }
 
-  function addAiFoodToPlate(food: Food) {
-    handleIncrease(food);
+  function addAiFoodToPlate(food: Food, messageId: string) {
+    const confirmedQuantity = aiServingQuantities[messageId] ?? food.suggestedQuantity ?? 1;
+    setPlateItems((prev) => {
+      const existing = prev.find((item) => item.id === food.id);
+      if (existing) return prev.map((item) => item.id === food.id ? { ...item, qty: confirmedQuantity } : item);
+      return [...prev, { ...food, qty: confirmedQuantity }];
+    });
     setAiOpen(false);
   }
 
@@ -1182,8 +1157,25 @@ function SearchContent() {
                         </div>
                       ))}
                     </div>
+                    {msg.suggestedFood.assumptions && msg.suggestedFood.assumptions.length > 0 && (
+                      <div className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[10.5px] text-amber-900">
+                        <p className="font-bold">Assumptions · {msg.suggestedFood.confidence || "low"} confidence</p>
+                        <p>{msg.suggestedFood.assumptions.join(" · ")}</p>
+                      </div>
+                    )}
+                    <div className="mb-3 flex items-center justify-between rounded-xl border border-[#BACAC5]/30 px-3 py-2">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Serving to add</p>
+                        <p className="text-[11px] text-gray-600">Confirm before logging</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button type="button" aria-label="Decrease estimated serving" onClick={() => setAiServingQuantities((prev) => ({ ...prev, [msg.id]: Math.max(0.5, (prev[msg.id] ?? msg.suggestedFood!.suggestedQuantity ?? 1) - 0.5) }))} className="h-7 w-7 rounded-full bg-gray-100 font-bold">−</button>
+                        <span className="min-w-12 text-center text-[12px] font-bold">{aiServingQuantities[msg.id] ?? msg.suggestedFood.suggestedQuantity ?? 1} serving</span>
+                        <button type="button" aria-label="Increase estimated serving" onClick={() => setAiServingQuantities((prev) => ({ ...prev, [msg.id]: Math.min(10, (prev[msg.id] ?? msg.suggestedFood!.suggestedQuantity ?? 1) + 0.5) }))} className="h-7 w-7 rounded-full bg-gray-100 font-bold">+</button>
+                      </div>
+                    </div>
                     <button
-                      onClick={() => addAiFoodToPlate(msg.suggestedFood!)}
+                      onClick={() => addAiFoodToPlate(msg.suggestedFood!, msg.id)}
                       className="w-full py-[10px] rounded-[13px] bg-[#006B5F] text-white
                         text-[13px] font-bold active:bg-[#00574D] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                     >

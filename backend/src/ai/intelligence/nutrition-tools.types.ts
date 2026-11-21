@@ -47,8 +47,48 @@ export interface NutritionTargetsResult {
 }
 
 export interface GetFoodHistoryArgs {
-  days: number; // Integer between 1 and 7 (V1 bound)
+  days: number; // Integer between 1 and 30 (bounded V1 summary window)
   endDate?: string; // Optional reference end date YYYY-MM-DD (defaults to local today)
+}
+
+export interface CatalogFoodResult {
+  id: string;
+  name: string;
+  category: string;
+  isVerified: boolean;
+  servingDescription: string;
+  servingGrams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export interface FoodCatalogLookupResult {
+  query: string;
+  foods: CatalogFoodResult[];
+}
+
+export interface WeightProgressResult {
+  days: number;
+  entries: Array<{ recordedAt: string; weightKg: number }>;
+  firstWeightKg: number | null;
+  latestWeightKg: number | null;
+  changeKg: number | null;
+}
+
+export interface MealPatternResult {
+  days: number;
+  loggedDaysCount: number;
+  commonFoods: Array<{ name: string; occurrences: number }>;
+  mealSlotCounts: Array<{ slot: string; entries: number }>;
+}
+
+export interface CatalogRecommendationResult {
+  maxCalories: number | null;
+  proteinPriority: boolean;
+  foods: CatalogFoodResult[];
+  basis: 'verified_catalog' | 'catalog';
 }
 
 export interface DailyHistoryEntry {

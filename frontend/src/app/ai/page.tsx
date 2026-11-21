@@ -6,9 +6,7 @@ import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { sendCoachChat, fetchUserProfile } from "@/lib/api";
 import { useAppStore, type CoachChatMessage } from "@/store/useAppStore";
-import { FormattedText, renderSafeInline } from "@/components/ui/FormattedText";
-
-export { FormattedText, renderSafeInline };
+import { FormattedText } from "@/components/ui/FormattedText";
 
 export type Message = CoachChatMessage;
 
@@ -374,7 +372,7 @@ export default function AIChatPage() {
                   <span
                     title={msg.provenance.details}
                     className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide select-none ${
-                      msg.provenance.source === "gemini" || msg.provenance.source === "hybrid"
+                      msg.provenance.source === "gemini" || msg.provenance.source === "hybrid" || msg.provenance.source === "rag"
                         ? "bg-purple-50 text-purple-700 border border-purple-200/80"
                         : msg.provenance.source === "caltrack_data"
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
@@ -387,8 +385,20 @@ export default function AIChatPage() {
                     {msg.provenance.source === "caltrack_data" && "📊"}
                     {msg.provenance.source === "local_fallback" && "⚡"}
                     {msg.provenance.source === "caltrack_local" && "⚙"}
+                    {msg.provenance.source === "rag" && "📚"}
                     <span>{msg.provenance.label}</span>
                   </span>
+                  {msg.provenance.citations?.map((citation) => (
+                    <a
+                      key={`${citation.title}-${citation.url}`}
+                      href={citation.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] font-semibold text-purple-700 underline underline-offset-2"
+                    >
+                      {citation.title}
+                    </a>
+                  ))}
                 </div>
               )}
 

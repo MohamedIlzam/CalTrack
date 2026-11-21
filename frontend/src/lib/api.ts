@@ -396,12 +396,16 @@ export type AiProvenanceSource =
   | 'caltrack_data'
   | 'caltrack_local'
   | 'local_fallback'
+  | 'rag'
   | 'hybrid';
 
 export interface AiProvenance {
   source: AiProvenanceSource;
   label: string;
   details?: string;
+  responseAuthor?: 'gemini' | 'caltrack_local';
+  factualSources?: string[];
+  citations?: Array<{ title: string; url: string; provenance?: string }>;
 }
 
 export interface AiFoodSuggestion {
@@ -415,6 +419,11 @@ export interface AiFoodSuggestion {
   chipColor: string;
   category: string;
   portionDescription?: string;
+  servingGrams?: number;
+  confidence?: 'low' | 'medium' | 'high';
+  assumptions?: string[];
+  suggestedQuantity?: number;
+  sourceKind?: 'gemini_estimate';
   isEstimate?: boolean;
 }
 

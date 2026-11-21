@@ -3,12 +3,22 @@ export type AiProvenanceSource =
   | 'caltrack_data'
   | 'caltrack_local'
   | 'local_fallback'
+  | 'rag'
   | 'hybrid';
+
+export interface AiCitation {
+  title: string;
+  url: string;
+  provenance?: string;
+}
 
 export interface AiProvenance {
   source: AiProvenanceSource;
   label: string; // e.g. "Gemini AI", "CalTrack Data", "CalTrack Local", "Local Fallback", "CalTrack Data + Gemini AI"
   details?: string;
+  responseAuthor?: 'gemini' | 'caltrack_local';
+  factualSources?: Array<'gemini_estimate' | 'caltrack_database' | 'user_records' | 'rag_evidence'>;
+  citations?: AiCitation[];
 }
 
 export const PROVENANCE_GEMINI: AiProvenance = {
@@ -39,4 +49,12 @@ export const PROVENANCE_HYBRID: AiProvenance = {
   source: 'hybrid',
   label: 'CalTrack Data + Gemini AI',
   details: 'Composed from user records augmented with Gemini AI',
+};
+
+export const PROVENANCE_RAG: AiProvenance = {
+  source: 'rag',
+  label: 'Evidence + Gemini AI',
+  details: 'Generated from retrieved CalTrack nutrition references',
+  responseAuthor: 'gemini',
+  factualSources: ['rag_evidence'],
 };
