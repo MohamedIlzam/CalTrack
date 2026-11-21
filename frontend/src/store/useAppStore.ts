@@ -5,7 +5,13 @@ import { persist } from "zustand/middleware";
 
 export type Goal = "lose" | "maintain" | "gain";
 export type ActivityLevel = "sedentary" | "light" | "moderate" | "active";
-export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack" | "snacks" | "saved_meals";
+export type MealSlot =
+  | "breakfast"
+  | "lunch"
+  | "dinner"
+  | "snack"
+  | "snacks"
+  | "saved_meals";
 
 export interface SubIngredient {
   id: string;
@@ -17,9 +23,9 @@ export interface FoodEntry {
   id: string;
   name: string;
   kcal: number;
-  carbs: number;   // grams
+  carbs: number; // grams
   protein: number; // grams
-  fat: number;     // grams
+  fat: number; // grams
   serving: string; // e.g. "1 piece", "2 tbsp"
   meal: MealSlot;
   qty?: number;
@@ -59,12 +65,20 @@ export interface CoachChatMessage {
   timestamp: string;
   card?: "daily-summary" | null;
   provenance?: {
-    source: 'gemini' | 'caltrack_data' | 'caltrack_local' | 'local_fallback' | 'rag' | 'hybrid';
+    source:
+      | "gemini"
+      | "caltrack_data"
+      | "caltrack_local"
+      | "local_fallback"
+      | "rag"
+      | "hybrid";
     label: string;
     details?: string;
-    responseAuthor?: 'gemini' | 'caltrack_local';
+    responseAuthor?: "gemini" | "caltrack_local";
     factualSources?: string[];
     citations?: Array<{ title: string; url: string; provenance?: string }>;
+    personalDataMode?: "not_requested" | "permitted" | "blocked";
+    claimsValidated?: boolean;
   };
   errorDetails?: {
     errorMessage: string;
@@ -74,6 +88,7 @@ export interface CoachChatMessage {
 
 interface CoachChatState {
   coachMessages: CoachChatMessage[];
+  personalizedAiConsent: boolean;
 }
 
 /* ─────────────── Actions ─────────────── */
@@ -86,16 +101,20 @@ interface Actions {
   removeFoodEntry: (id: string) => void;
   clearEntries: () => void;
   setCoachMessages: (
-    messages: CoachChatMessage[] | ((prev: CoachChatMessage[]) => CoachChatMessage[])
+    messages:
+      | CoachChatMessage[]
+      | ((prev: CoachChatMessage[]) => CoachChatMessage[]),
   ) => void;
   clearCoachMessages: () => void;
+  setPersonalizedAiConsent: (enabled: boolean) => void;
   setAuth: (token: string, user: any) => void;
   logout: () => void;
 }
 
 /* ─────────────── Store ─────────────── */
 
-interface AppStore extends OnboardingState, DailyLogState, CoachChatState, Actions {}
+interface AppStore
+  extends OnboardingState, DailyLogState, CoachChatState, Actions {}
 
 export const useAppStore = create<AppStore>()(
   persist(
@@ -120,6 +139,7 @@ export const useAppStore = create<AppStore>()(
 
       // AI Coach chat defaults
       coachMessages: [],
+      personalizedAiConsent: false,
 
       // Actions
       setOnboarding: (data) => set((state) => ({ ...state, ...data })),
@@ -131,7 +151,9 @@ export const useAppStore = create<AppStore>()(
 
       updateFoodEntry: (id, updated) =>
         set((state) => ({
-          entries: state.entries.map((e) => (e.id === id ? { ...e, ...updated } : e)),
+          entries: state.entries.map((e) =>
+            e.id === id ? { ...e, ...updated } : e,
+          ),
         })),
 
       removeFoodEntry: (id) =>
@@ -142,32 +164,42 @@ export const useAppStore = create<AppStore>()(
       setCoachMessages: (messages) =>
         set((state) => ({
           coachMessages:
-            typeof messages === "function" ? messages(state.coachMessages) : messages,
+            typeof messages === "function"
+              ? messages(state.coachMessages)
+              : messages,
         })),
 
       clearCoachMessages: () => set({ coachMessages: [] }),
+      setPersonalizedAiConsent: (enabled) =>
+        set({ personalizedAiConsent: enabled }),
 
-      setAuth: (token, user) => set((state) => {
-        const isDifferentUser = !state.email || state.email !== user.email;
-        return {
-          ...state,
-          token,
-          email: user.email,
-          name: user.name,
-          goal: user.goal ? (user.goal.toLowerCase() as Goal) : state.goal,
-          weightKg: user.weightKg || state.weightKg,
-          targetWeightKg: user.targetWeightKg || state.targetWeightKg,
-          heightCm: user.heightCm || state.heightCm,
-          activityLevel: user.activityLevel ? (user.activityLevel.toLowerCase() as ActivityLevel) : state.activityLevel,
-          targetCalories: user.targetCalories || state.targetCalories,
-          targetProteinG: user.targetProteinG || state.targetProteinG,
-          targetCarbsG: user.targetCarbsG || state.targetCarbsG,
-          targetFatG: user.targetFatG || state.targetFatG,
-          hasOnboarded: true,
-          entries: isDifferentUser ? [] : state.entries,
-          coachMessages: isDifferentUser ? [] : state.coachMessages,
-        };
-      }),
+      setAuth: (token, user) =>
+        set((state) => {
+          const isDifferentUser = !state.email || state.email !== user.email;
+          return {
+            ...state,
+            token,
+            email: user.email,
+            name: user.name,
+            goal: user.goal ? (user.goal.toLowerCase() as Goal) : state.goal,
+            weightKg: user.weightKg || state.weightKg,
+            targetWeightKg: user.targetWeightKg || state.targetWeightKg,
+            heightCm: user.heightCm || state.heightCm,
+            activityLevel: user.activityLevel
+              ? (user.activityLevel.toLowerCase() as ActivityLevel)
+              : state.activityLevel,
+            targetCalories: user.targetCalories || state.targetCalories,
+            targetProteinG: user.targetProteinG || state.targetProteinG,
+            targetCarbsG: user.targetCarbsG || state.targetCarbsG,
+            targetFatG: user.targetFatG || state.targetFatG,
+            hasOnboarded: true,
+            entries: isDifferentUser ? [] : state.entries,
+            coachMessages: isDifferentUser ? [] : state.coachMessages,
+            personalizedAiConsent: isDifferentUser
+              ? false
+              : state.personalizedAiConsent,
+          };
+        }),
 
       logout: () => {
         if (typeof window !== "undefined") {
@@ -189,26 +221,27 @@ export const useAppStore = create<AppStore>()(
           targetFatG: 0,
           entries: [],
           coachMessages: [],
+          personalizedAiConsent: false,
         });
       },
     }),
     {
       name: "caltrack-storage",
-    }
-  )
+    },
+  ),
 );
 
 /* ─────────────── Derived selectors ─────────────── */
 
 /** Total consumed kcal across all meals today */
 export const selectConsumedKcal = (s: AppStore) =>
-  s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.kcal, 0);
+  s.entries
+    .filter((e) => e.meal !== "saved_meals")
+    .reduce((sum, e) => sum + e.kcal, 0);
 
 /** Consumed kcal per meal slot */
 export const selectKcalByMeal = (meal: MealSlot) => (s: AppStore) =>
-  s.entries
-    .filter((e) => e.meal === meal)
-    .reduce((sum, e) => sum + e.kcal, 0);
+  s.entries.filter((e) => e.meal === meal).reduce((sum, e) => sum + e.kcal, 0);
 
 /** Entries for a specific meal */
 export const selectEntriesByMeal = (meal: MealSlot) => (s: AppStore) =>

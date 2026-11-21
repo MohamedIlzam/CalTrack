@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import Redis from 'ioredis';
 
 @Injectable()
@@ -25,8 +30,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.get(key);
   }
 
-  async set(key: string, value: string, ttlSeconds: number = 3600): Promise<void> {
+  async set(
+    key: string,
+    value: string,
+    ttlSeconds: number = 3600,
+  ): Promise<void> {
     await this.client.set(key, value, 'EX', ttlSeconds);
+  }
+
+  async del(key: string): Promise<void> {
+    await this.client.del(key);
   }
 
   /**
@@ -57,7 +70,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     `;
 
     const result = await this.client.eval(luaScript, 1, key, windowSeconds);
-    const current = typeof result === 'number' ? result : parseInt(String(result), 10);
+    const current =
+      typeof result === 'number' ? result : parseInt(String(result), 10);
 
     return {
       allowed: current <= limit,

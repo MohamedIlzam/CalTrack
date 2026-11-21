@@ -17,8 +17,12 @@ export interface AiProvenance {
   label: string; // e.g. "Gemini AI", "CalTrack Data", "CalTrack Local", "Local Fallback", "CalTrack Data + Gemini AI"
   details?: string;
   responseAuthor?: 'gemini' | 'caltrack_local';
-  factualSources?: Array<'gemini_estimate' | 'caltrack_database' | 'user_records' | 'rag_evidence'>;
+  factualSources?: Array<
+    'gemini_estimate' | 'caltrack_database' | 'user_records' | 'rag_evidence'
+  >;
   citations?: AiCitation[];
+  personalDataMode?: 'not_requested' | 'permitted' | 'blocked';
+  claimsValidated?: boolean;
 }
 
 export const PROVENANCE_GEMINI: AiProvenance = {
@@ -42,7 +46,8 @@ export const PROVENANCE_CALTRACK_LOCAL: AiProvenance = {
 export const PROVENANCE_LOCAL_FALLBACK: AiProvenance = {
   source: 'local_fallback',
   label: 'Local Fallback',
-  details: 'Deterministic local fallback following upstream AI service unavailability',
+  details:
+    'Deterministic local fallback following upstream AI service unavailability',
 };
 
 export const PROVENANCE_HYBRID: AiProvenance = {

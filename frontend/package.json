@@ -6,7 +6,7 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "test": "node test-safe-rendering.mjs && node test-diary-integrity.mjs && node test-meal-card.mjs && node test-date-correctness.mjs && node test-search-resilience.mjs && node test-profile-logout.mjs && node test-profile-guard.mjs && node test-profile-targets-and-bmi.mjs && node test-progress-analytics.mjs && node test-unified-header.mjs && node test-api-config.mjs && node test-ai-provenance.mjs",
+    "test": "node test-safe-rendering.mjs && node test-diary-integrity.mjs && node test-meal-card.mjs && node test-date-correctness.mjs && node test-search-resilience.mjs && node test-profile-logout.mjs && node test-profile-guard.mjs && node test-profile-targets-and-bmi.mjs && node test-progress-analytics.mjs && node test-unified-header.mjs && node test-api-config.mjs && node test-ai-provenance.mjs && node test-ai-privacy-mode.mjs",
     "lint": "eslint"
   },
   "dependencies": {

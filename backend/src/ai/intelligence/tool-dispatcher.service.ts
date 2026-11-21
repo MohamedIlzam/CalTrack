@@ -3,8 +3,10 @@ import {
   Logger,
   BadRequestException,
   UnauthorizedException,
+  Optional,
 } from '@nestjs/common';
 import { NutritionToolsService } from './nutrition-tools.service';
+import { NutritionRagService } from './rag/nutrition-rag.service';
 
 export const ALLOWED_TOOL_NAMES = [
   'getDailyNutrition',
@@ -14,6 +16,7 @@ export const ALLOWED_TOOL_NAMES = [
   'getWeightProgress',
   'getMealPatterns',
   'getFoodRecommendations',
+  'searchNutritionKnowledge',
 ] as const;
 
 export type AllowedToolName = (typeof ALLOWED_TOOL_NAMES)[number];
@@ -38,7 +41,10 @@ export interface DispatchedToolResult {
 export class ToolDispatcherService {
   private readonly logger = new Logger(ToolDispatcherService.name);
 
-  constructor(private readonly nutritionToolsService: NutritionToolsService) {}
+  constructor(
+    private readonly nutritionToolsService: NutritionToolsService,
+    @Optional() private readonly nutritionRagService?: NutritionRagService,
+  ) {}
 
   /**
    * Checks whether a requested tool name is in the strict approved allowlist.
@@ -51,7 +57,9 @@ export class ToolDispatcherService {
    * Sanitizes model-generated arguments to prevent identity spoofing or parameter injection.
    * Strips any attempt by the LLM to provide or override a userId or execute unauthorized fields.
    */
-  private sanitizeArguments(rawArgs?: Record<string, any>): Record<string, any> {
+  private sanitizeArguments(
+    rawArgs?: Record<string, any>,
+  ): Record<string, any> {
     if (!rawArgs || typeof rawArgs !== 'object' || Array.isArray(rawArgs)) {
       return {};
     }
@@ -81,7 +89,9 @@ export class ToolDispatcherService {
       typeof authenticatedUserId !== 'string' ||
       !authenticatedUserId.trim()
     ) {
-      throw new UnauthorizedException('Valid authenticated userId is required for tool execution');
+      throw new UnauthorizedException(
+        'Valid authenticated userId is required for tool execution',
+      );
     }
 
     const { name, callId } = toolCall;
@@ -106,16 +116,24 @@ export class ToolDispatcherService {
       switch (name) {
         case 'getDailyNutrition': {
           if (!cleanArgs.date) {
-            throw new BadRequestException('Missing required parameter: "date" (YYYY-MM-DD)');
+            throw new BadRequestException(
+              'Missing required parameter: "date" (YYYY-MM-DD)',
+            );
           }
-          data = await this.nutritionToolsService.getDailyNutrition(authenticatedUserId, {
-            date: cleanArgs.date,
-          });
+          data = await this.nutritionToolsService.getDailyNutrition(
+            authenticatedUserId,
+            {
+              date: cleanArgs.date,
+            },
+          );
           break;
         }
 
         case 'getNutritionTargets': {
-          data = await this.nutritionToolsService.getNutritionTargets(authenticatedUserId);
+          data =
+            await this.nutritionToolsService.getNutritionTargets(
+              authenticatedUserId,
+            );
           break;
         }
 
@@ -125,33 +143,81 @@ export class ToolDispatcherService {
               'Missing required parameter: "days" (integer between 1 and 7)',
             );
           }
-          data = await this.nutritionToolsService.getFoodHistory(authenticatedUserId, {
-            days: cleanArgs.days,
-            endDate: cleanArgs.endDate,
-          });
+          data = await this.nutritionToolsService.getFoodHistory(
+            authenticatedUserId,
+            {
+              days: cleanArgs.days,
+              endDate: cleanArgs.endDate,
+            },
+          );
           break;
         }
         case 'lookupFoods': {
-          data = await this.nutritionToolsService.lookupFoods(authenticatedUserId, {
-            query: cleanArgs.query,
-            limit: cleanArgs.limit,
-          });
+          data = await this.nutritionToolsService.lookupFoods(
+            authenticatedUserId,
+            {
+              query: cleanArgs.query,
+              limit: cleanArgs.limit,
+            },
+          );
           break;
         }
         case 'getWeightProgress': {
-          data = await this.nutritionToolsService.getWeightProgress(authenticatedUserId, { days: cleanArgs.days });
+          data = await this.nutritionToolsService.getWeightProgress(
+            authenticatedUserId,
+            { days: cleanArgs.days },
+          );
           break;
         }
         case 'getMealPatterns': {
-          data = await this.nutritionToolsService.getMealPatterns(authenticatedUserId, { days: cleanArgs.days });
+          data = await this.nutritionToolsService.getMealPatterns(
+            authenticatedUserId,
+            { days: cleanArgs.days },
+          );
           break;
         }
         case 'getFoodRecommendations': {
-          data = await this.nutritionToolsService.getFoodRecommendations(authenticatedUserId, {
-            maxCalories: cleanArgs.maxCalories,
-            proteinPriority: cleanArgs.proteinPriority,
-            limit: cleanArgs.limit,
-          });
+          data = await this.nutritionToolsService.getFoodRecommendations(
+            authenticatedUserId,
+            {
+              maxCalories: cleanArgs.maxCalories,
+              proteinPriority: cleanArgs.proteinPriority,
+              limit: cleanArgs.limit,
+            },
+          );
+          break;
+        }
+        case 'searchNutritionKnowledge': {
+          if (!this.nutritionRagService) {
+            throw new BadRequestException(
+              'Nutrition evidence retrieval is unavailable',
+            );
+          }
+          const query =
+            typeof cleanArgs.query === 'string' ? cleanArgs.query.trim() : '';
+          if (!query || query.length > 500) {
+            throw new BadRequestException(
+              'query must be between 1 and 500 characters',
+            );
+          }
+          const limit = Math.min(Math.max(Number(cleanArgs.limit) || 2, 1), 3);
+          const evidence =
+            await this.nutritionRagService.searchNutritionKnowledge(
+              query,
+              limit,
+            );
+          data = {
+            query,
+            evidence: evidence.map((item) => ({
+              id: item.id,
+              title: item.title,
+              content: item.content.slice(0, 1800),
+              sourceTitle: item.sourceTitle,
+              sourceUrl: item.sourceUrl,
+              provenance: item.provenance,
+              similarity: item.similarity,
+            })),
+          };
           break;
         }
       }
@@ -167,7 +233,7 @@ export class ToolDispatcherService {
       const errorMessage =
         err instanceof BadRequestException || err.name === 'BadRequestException'
           ? err.message
-          : err.message || 'Tool execution encountered an error';
+          : 'Tool execution unavailable';
 
       this.logger.warn(`Tool "${name}" execution failed: ${errorMessage}`);
 

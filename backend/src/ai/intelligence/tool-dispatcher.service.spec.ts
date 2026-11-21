@@ -4,7 +4,10 @@ import {
   ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ToolDispatcherService, MAX_TOOL_CALLS_PER_REQUEST } from './tool-dispatcher.service';
+import {
+  ToolDispatcherService,
+  MAX_TOOL_CALLS_PER_REQUEST,
+} from './tool-dispatcher.service';
 import { NutritionToolsService } from './nutrition-tools.service';
 import { GeminiFunctionCallingService } from './gemini-function-calling.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -39,13 +42,15 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
     }).compile();
 
     dispatcher = module.get<ToolDispatcherService>(ToolDispatcherService);
-    functionCallingService = module.get<GeminiFunctionCallingService>(GeminiFunctionCallingService);
+    functionCallingService = module.get<GeminiFunctionCallingService>(
+      GeminiFunctionCallingService,
+    );
   });
 
   // ---------------------------------------------------------------------------
   // 1. Model Request for Daily Nutrition Maps to Correct Tool
   // ---------------------------------------------------------------------------
-  it('1. A model request for today\'s nutrition maps to getDailyNutrition with validated date', async () => {
+  it("1. A model request for today's nutrition maps to getDailyNutrition with validated date", async () => {
     const mockDailyResult = {
       date: '2026-11-20',
       isLogged: true,
@@ -86,7 +91,9 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
       heightCm: 175,
       activityLevel: 'MODERATE',
     };
-    nutritionToolsService.getNutritionTargets.mockResolvedValue(mockTargetsResult);
+    nutritionToolsService.getNutritionTargets.mockResolvedValue(
+      mockTargetsResult,
+    );
 
     const result = await dispatcher.dispatch(authenticatedUserId, {
       name: 'getNutritionTargets',
@@ -96,7 +103,9 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
     expect(result.success).toBe(true);
     expect(result.tool).toBe('getNutritionTargets');
     expect(result.data).toEqual(mockTargetsResult);
-    expect(nutritionToolsService.getNutritionTargets).toHaveBeenCalledWith(authenticatedUserId);
+    expect(nutritionToolsService.getNutritionTargets).toHaveBeenCalledWith(
+      authenticatedUserId,
+    );
   });
 
   // ---------------------------------------------------------------------------
@@ -125,16 +134,19 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
     expect(result.success).toBe(true);
     expect(result.tool).toBe('getFoodHistory');
     expect(result.data).toEqual(mockHistoryResult);
-    expect(nutritionToolsService.getFoodHistory).toHaveBeenCalledWith(authenticatedUserId, {
-      days: 7,
-      endDate: '2026-11-20',
-    });
+    expect(nutritionToolsService.getFoodHistory).toHaveBeenCalledWith(
+      authenticatedUserId,
+      {
+        days: 7,
+        endDate: '2026-11-20',
+      },
+    );
   });
 
   // ---------------------------------------------------------------------------
   // 4. Multiple Required Tool Calls Handled Safely in Batch
   // ---------------------------------------------------------------------------
-  it('4. Multiple required tool calls (e.g. today\'s nutrition + targets) are handled safely', async () => {
+  it("4. Multiple required tool calls (e.g. today's nutrition + targets) are handled safely", async () => {
     nutritionToolsService.getDailyNutrition.mockResolvedValue({
       date: '2026-11-20',
       totalCalories: 1500,
@@ -207,7 +219,9 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
       args: {},
     });
     expect(resMissingDate.success).toBe(false);
-    expect(resMissingDate.error).toContain('Missing required parameter: "date"');
+    expect(resMissingDate.error).toContain(
+      'Missing required parameter: "date"',
+    );
 
     // Missing required days in getFoodHistory
     const resMissingDays = await dispatcher.dispatch(authenticatedUserId, {
@@ -215,7 +229,9 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
       args: {},
     });
     expect(resMissingDays.success).toBe(false);
-    expect(resMissingDays.error).toContain('Missing required parameter: "days"');
+    expect(resMissingDays.error).toContain(
+      'Missing required parameter: "days"',
+    );
 
     // Service-level validation errors (e.g. invalid date format or out-of-range days)
     nutritionToolsService.getDailyNutrition.mockRejectedValue(
@@ -293,7 +309,8 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
 
     expect(result.success).toBe(false);
     expect(result.tool).toBe('getFoodHistory');
-    expect(result.error).toBe('Internal database connection timeout');
+    expect(result.error).toBe('Tool execution unavailable');
+    expect(result.error).not.toContain('database');
     // Ensure no stack trace object was attached
     expect((result as any).stack).toBeUndefined();
   });
@@ -328,7 +345,8 @@ describe('ToolDispatcherService & Gemini Function Calling Foundation (CIE Impl 0
   // Synthetic End-to-End Demonstration Loop
   // ---------------------------------------------------------------------------
   it('End-to-End Demonstration: Runs full synthetic tool-call and response loop cleanly', async () => {
-    const syntheticPrompt = 'How much protein have I eaten today, and what is my daily target?';
+    const syntheticPrompt =
+      'How much protein have I eaten today, and what is my daily target?';
     const syntheticToolCalls = [
       { name: 'getDailyNutrition', args: { date: '2026-11-20' } },
       { name: 'getNutritionTargets', args: {} },

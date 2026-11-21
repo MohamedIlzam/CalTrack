@@ -4,7 +4,12 @@ import React, { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { AppHeader } from "@/components/ui/AppHeader";
-import { sendCoachChat, fetchUserProfile } from "@/lib/api";
+import {
+  sendCoachChat,
+  fetchUserProfile,
+  resetCoachChat,
+  CoachChatError,
+} from "@/lib/api";
 import { useAppStore, type CoachChatMessage } from "@/store/useAppStore";
 import { FormattedText } from "@/components/ui/FormattedText";
 
@@ -19,11 +24,23 @@ const SUGGESTION_CHIPS = [
 ];
 
 /* ─────────────── Live Daily Snapshot Card ─────────────── */
-function DailySnapshotCard({ targetCaloriesOverride, targetProteinOverride }: { targetCaloriesOverride?: number; targetProteinOverride?: number }) {
+function DailySnapshotCard({
+  targetCaloriesOverride,
+  targetProteinOverride,
+}: {
+  targetCaloriesOverride?: number;
+  targetProteinOverride?: number;
+}) {
   const storeKcal = useAppStore((s) => s.targetCalories);
   const storeProtein = useAppStore((s) => s.targetProteinG);
-  const targetKcal = (targetCaloriesOverride && targetCaloriesOverride > 0) ? targetCaloriesOverride : (storeKcal || 2000);
-  const targetProtein = (targetProteinOverride && targetProteinOverride > 0) ? targetProteinOverride : (storeProtein || 120);
+  const targetKcal =
+    targetCaloriesOverride && targetCaloriesOverride > 0
+      ? targetCaloriesOverride
+      : storeKcal || 2000;
+  const targetProtein =
+    targetProteinOverride && targetProteinOverride > 0
+      ? targetProteinOverride
+      : storeProtein || 120;
   const targetCarbs = useAppStore((s) => s.targetCarbsG) || 220;
   const targetFat = useAppStore((s) => s.targetFatG) || 60;
   const entries = useAppStore((s) => s.entries);
@@ -45,7 +62,10 @@ function DailySnapshotCard({ targetCaloriesOverride, targetProteinOverride }: { 
               Live Macro Snapshot
             </p>
             <p className="text-[18px] font-extrabold tracking-tight mt-0.5">
-              {remainingKcal} <span className="text-[12px] font-normal text-white/80">kcal remaining</span>
+              {remainingKcal}{" "}
+              <span className="text-[12px] font-normal text-white/80">
+                kcal remaining
+              </span>
             </p>
           </div>
           <div className="text-right">
@@ -58,19 +78,43 @@ function DailySnapshotCard({ targetCaloriesOverride, targetProteinOverride }: { 
         {/* Macro Bars */}
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Protein", val: consumedProtein, target: targetProtein, color: "#2DD4BF", bg: "bg-[#2DD4BF]" },
-            { label: "Carbs", val: consumedCarbs, target: targetCarbs, color: "#FFAD3A", bg: "bg-[#FFAD3A]" },
-            { label: "Fat", val: consumedFat, target: targetFat, color: "#94A3B8", bg: "bg-[#94A3B8]" },
+            {
+              label: "Protein",
+              val: consumedProtein,
+              target: targetProtein,
+              color: "#2DD4BF",
+              bg: "bg-[#2DD4BF]",
+            },
+            {
+              label: "Carbs",
+              val: consumedCarbs,
+              target: targetCarbs,
+              color: "#FFAD3A",
+              bg: "bg-[#FFAD3A]",
+            },
+            {
+              label: "Fat",
+              val: consumedFat,
+              target: targetFat,
+              color: "#94A3B8",
+              bg: "bg-[#94A3B8]",
+            },
           ].map(({ label, val, target, bg }) => {
             const pct = Math.min(100, Math.round((val / (target || 1)) * 100));
             return (
-              <div key={label} className="bg-white/10 rounded-xl p-2.5 backdrop-blur-sm space-y-1.5">
+              <div
+                key={label}
+                className="bg-white/10 rounded-xl p-2.5 backdrop-blur-sm space-y-1.5"
+              >
                 <div className="flex justify-between text-[11px] font-bold">
                   <span className="text-white/80">{label}</span>
                   <span>{val}g</span>
                 </div>
                 <div className="w-full h-1.5 bg-black/20 rounded-full overflow-hidden">
-                  <div className={`h-full ${bg} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                  <div
+                    className={`h-full ${bg} rounded-full transition-all duration-500`}
+                    style={{ width: `${pct}%` }}
+                  />
                 </div>
               </div>
             );
@@ -84,9 +128,6 @@ function DailySnapshotCard({ targetCaloriesOverride, targetProteinOverride }: { 
 /* ─────────────── Main Chat Page ─────────────── */
 export default function AIChatPage() {
   const userName = useAppStore((s) => s.name);
-  const storeTargetKcal = useAppStore((s) => s.targetCalories);
-  const entries = useAppStore((s) => s.entries);
-  const consumedKcal = entries.reduce((sum, e) => sum + e.kcal, 0);
 
   const { data: profile } = useQuery({
     queryKey: ["userProfile"],
@@ -105,19 +146,23 @@ export default function AIChatPage() {
     }
   }, [profile]);
 
-  const targetKcal = profile?.targetCalories ?? (storeTargetKcal || 2000);
-
   const storeMessages = useAppStore((s) => s.coachMessages);
   const setStoreMessages = useAppStore((s) => s.setCoachMessages);
   const clearCoachMessages = useAppStore((s) => s.clearCoachMessages);
+  const personalizedAiConsent = useAppStore((s) => s.personalizedAiConsent);
+  const setPersonalizedAiConsent = useAppStore(
+    (s) => s.setPersonalizedAiConsent,
+  );
 
-  const initialWelcome = React.useMemo<Message>(() => ({
-    id: "welcome",
-    role: "coach",
-    content: `Hello ${userName ? userName : "there"}! 👋 I'm your CalTrack AI Nutrition Coach.\n\nToday you've logged **${consumedKcal} / ${targetKcal} kcal**. Ask me anything about your meals, recipe ideas, macros, or energy balance!`,
-    timestamp: "Live",
-    card: "daily-summary",
-  }), [userName, consumedKcal, targetKcal]);
+  const initialWelcome = React.useMemo<Message>(
+    () => ({
+      id: "welcome",
+      role: "coach",
+      content: `Hello ${userName ? userName : "there"}! 👋 Ask Gemini about foods, recipes, nutrition research, or meal ideas. Personalized diary and target questions require the privacy opt-in shown below.`,
+      timestamp: "Live",
+    }),
+    [userName],
+  );
 
   // Preserve chat history across bottom navigation tab switches (Search, Progress, Home)
   const messages = React.useMemo<Message[]>(() => {
@@ -127,7 +172,11 @@ export default function AIChatPage() {
     // If first message was welcome message, keep its live snapshot updated
     if (storeMessages[0]?.id === "welcome") {
       return [
-        { ...storeMessages[0], content: initialWelcome.content, timestamp: initialWelcome.timestamp },
+        {
+          ...storeMessages[0],
+          content: initialWelcome.content,
+          timestamp: initialWelcome.timestamp,
+        },
         ...storeMessages.slice(1),
       ];
     }
@@ -136,6 +185,11 @@ export default function AIChatPage() {
 
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [serviceError, setServiceError] = useState<{
+    message: string;
+    code?: string;
+    lastPrompt: string;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -145,7 +199,10 @@ export default function AIChatPage() {
   // Auto-scroll to ensure latest message and response are fully in view
   useEffect(() => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+      messagesEndRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
     } else if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
@@ -170,13 +227,19 @@ export default function AIChatPage() {
     };
 
     // If store is empty, include initialWelcome before userMsg so conversation context is preserved
-    const baseHistory = storeMessages && storeMessages.length > 0 ? storeMessages : [initialWelcome];
+    const baseHistory =
+      storeMessages && storeMessages.length > 0
+        ? storeMessages
+        : [initialWelcome];
     setStoreMessages([...baseHistory, userMsg]);
     setInput("");
     setIsThinking(true);
+    setServiceError(null);
 
     try {
-      const res = await sendCoachChat(text);
+      const res = await sendCoachChat(text, undefined, {
+        personalizedConsent: personalizedAiConsent,
+      });
       const coachMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "coach",
@@ -191,30 +254,28 @@ export default function AIChatPage() {
       setStoreMessages((prev) => [...prev, coachMsg]);
     } catch (err: any) {
       console.warn("Coach chat error (handled):", err?.message || err);
-      const errMsg = err?.message || "Unable to reach CalTrack AI. Please check your connection or try again.";
-      const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "error",
-        content: errMsg,
-        timestamp: new Date().toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        }),
-        errorDetails: {
-          errorMessage: errMsg,
-          lastPrompt: text,
-        },
-      };
-      setStoreMessages((prev) => [...prev, errorMsg]);
+      const errMsg =
+        err?.message ||
+        "Unable to reach CalTrack AI. Please check your connection or try again.";
+      setServiceError({
+        message: errMsg,
+        code: err instanceof CoachChatError ? err.code : undefined,
+        lastPrompt: text,
+      });
     } finally {
       setIsThinking(false);
     }
   };
 
-  const handleClearChat = () => {
+  const handleClearChat = async () => {
     clearCoachMessages();
     setInput("");
+    setServiceError(null);
+    try {
+      await resetCoachChat();
+    } catch (error) {
+      console.warn("Server conversation reset failed:", error);
+    }
   };
 
   return (
@@ -264,12 +325,64 @@ export default function AIChatPage() {
             title="Reset Conversation"
             className="hover:bg-red-50 text-gray-400 hover:text-red-500 active:scale-95 transition-all text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
             </svg>
             <span>Reset</span>
           </button>
         </div>
+
+        <label className="flex items-start gap-3 rounded-2xl border border-purple-200 bg-purple-50/70 p-4 text-[12px] leading-relaxed text-purple-950">
+          <input
+            type="checkbox"
+            checked={personalizedAiConsent}
+            onChange={(event) => setPersonalizedAiConsent(event.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-purple-700"
+          />
+          <span>
+            <strong>Personalized Gemini opt-in.</strong> If the operator has
+            separately confirmed an eligible paid Gemini configuration, allow
+            CalTrack to send only the minimum relevant nutrition totals,
+            targets, food logs, weight trends, or profile metrics needed for my
+            question. Names, email, account IDs, and credentials are excluded.
+            You can turn this off at any time.
+          </span>
+        </label>
+
+        {serviceError && (
+          <div
+            className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900 space-y-2"
+            role="alert"
+          >
+            <p className="text-[11px] font-extrabold uppercase tracking-[1.2px]">
+              {serviceError.code === "PERSONALIZED_GEMINI_REQUIRED"
+                ? "Personalized AI unavailable"
+                : "AI service error"}
+            </p>
+            <p className="text-[13px] leading-relaxed">
+              {serviceError.message}
+            </p>
+            <button
+              type="button"
+              onClick={() => handleSendMessage(serviceError.lastPrompt)}
+              disabled={isThinking}
+              className="text-[12px] font-bold underline underline-offset-2 disabled:opacity-50"
+            >
+              Retry request
+            </button>
+          </div>
+        )}
+
         {messages.map((msg) => {
           if (msg.role === "user") {
             return (
@@ -320,12 +433,24 @@ export default function AIChatPage() {
                   </p>
                   {msg.errorDetails?.lastPrompt && (
                     <button
-                      onClick={() => handleSendMessage(msg.errorDetails!.lastPrompt)}
+                      onClick={() =>
+                        handleSendMessage(msg.errorDetails!.lastPrompt)
+                      }
                       disabled={isThinking}
                       className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-[12px] font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
                       </svg>
                       Retry Request
                     </button>
@@ -372,22 +497,30 @@ export default function AIChatPage() {
                   <span
                     title={msg.provenance.details}
                     className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide select-none ${
-                      msg.provenance.source === "gemini" || msg.provenance.source === "hybrid" || msg.provenance.source === "rag"
+                      msg.provenance.source === "gemini" ||
+                      msg.provenance.source === "hybrid" ||
+                      msg.provenance.source === "rag"
                         ? "bg-purple-50 text-purple-700 border border-purple-200/80"
                         : msg.provenance.source === "caltrack_data"
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
-                        : msg.provenance.source === "local_fallback"
-                        ? "bg-amber-50 text-amber-700 border border-amber-200/80"
-                        : "bg-gray-100 text-gray-700 border border-gray-200/80"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                          : msg.provenance.source === "local_fallback"
+                            ? "bg-amber-50 text-amber-700 border border-amber-200/80"
+                            : "bg-gray-100 text-gray-700 border border-gray-200/80"
                     }`}
                   >
                     {msg.provenance.source === "gemini" && "✦"}
+                    {msg.provenance.source === "hybrid" && "✦"}
                     {msg.provenance.source === "caltrack_data" && "📊"}
                     {msg.provenance.source === "local_fallback" && "⚡"}
                     {msg.provenance.source === "caltrack_local" && "⚙"}
                     {msg.provenance.source === "rag" && "📚"}
                     <span>{msg.provenance.label}</span>
                   </span>
+                  {msg.provenance.personalDataMode === "permitted" && (
+                    <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                      Consented personal context
+                    </span>
+                  )}
                   {msg.provenance.citations?.map((citation) => (
                     <a
                       key={`${citation.title}-${citation.url}`}
@@ -424,7 +557,12 @@ export default function AIChatPage() {
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v8l9-11h-7z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M13 10V3L4 14h7v8l9-11h-7z"
+                  />
                 </svg>
               </div>
               <span className="text-[10px] font-bold text-[#006B5F] uppercase tracking-[1.4px]">

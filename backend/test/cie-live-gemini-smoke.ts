@@ -1,154 +1,116 @@
 /**
- * CalTrack Intelligence Engine (CIE) — Developer-Only Live Gemini Smoke Test
- *
- * Verifies real Gemini function calling against the 5 natural-language questions
- * using strictly hardcoded synthetic data fixtures.
- *
- * Usage:
- *   npx ts-node -r dotenv/config test/cie-live-gemini-smoke.ts
+ * Developer-only live Gemini smoke evaluation.
+ * Uses nonpersonal prompts and hardcoded synthetic tool results only.
  */
-
 import * as dotenv from 'dotenv';
 dotenv.config();
 
 import { GeminiFunctionCallingService } from '../src/ai/intelligence/gemini-function-calling.service';
-import { ToolDispatcherService } from '../src/ai/intelligence/tool-dispatcher.service';
-import { NutritionToolsService } from '../src/ai/intelligence/nutrition-tools.service';
 
-async function runLiveSmokeTest() {
-  console.log('================================================================');
-  console.log('CALTRACK CIE: LIVE GEMINI FUNCTION-CALLING SMOKE TEST');
-  console.log('================================================================\n');
+const syntheticDispatcher: any = {
+  isToolAllowed: (name: string) =>
+    ['lookupFoods', 'searchNutritionKnowledge', 'getNutritionTargets'].includes(
+      name,
+    ),
+  dispatchBatch: async (_authenticatedSyntheticUser: string, calls: any[]) =>
+    calls.map((call) => {
+      if (call.name === 'lookupFoods') {
+        return {
+          tool: call.name,
+          callId: call.callId,
+          success: true,
+          data: {
+            query: call.args?.query,
+            foods: call.args?.query?.toLowerCase().includes('prawn')
+              ? [
+                  {
+                    name: 'Prawn curry',
+                    servingDescription: '1 cup',
+                    servingGrams: 240,
+                    calories: 310,
+                    protein: 24,
+                    carbs: 12,
+                    fat: 18,
+                    isVerified: true,
+                  },
+                ]
+              : [],
+          },
+        };
+      }
+      if (call.name === 'searchNutritionKnowledge') {
+        return {
+          tool: call.name,
+          callId: call.callId,
+          success: true,
+          data: {
+            query: call.args?.query,
+            evidence: [
+              {
+                title: 'Synthetic protein recovery passage',
+                content:
+                  'Dietary protein supplies amino acids used during muscle repair.',
+                sourceTitle: 'Synthetic Test Reference',
+                sourceUrl: 'https://example.org/synthetic-reference',
+                provenance: 'synthetic-live-smoke',
+              },
+            ],
+          },
+        };
+      }
+      return {
+        tool: call.name,
+        callId: call.callId,
+        success: true,
+        data: {
+          targetCalories: 2100,
+          targetProteinG: 133,
+          targetCarbsG: 250,
+          targetFatG: 70,
+          goal: 'MAINTAIN',
+        },
+      };
+    }),
+};
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error('❌ BLOCKER: GEMINI_API_KEY is not configured in environment.');
-    console.error('Cannot execute live Gemini function calling verification.');
-    process.exit(1);
-  }
-
-  // Create isolated services (no Prisma or real database connections)
-  const mockNutritionToolsService: any = {
-    validateDateString: (d: string) => d,
-    validateDaysLimit: (days: number) => days,
-  };
-
-  const dispatcher = new ToolDispatcherService(mockNutritionToolsService);
-  const service = new GeminiFunctionCallingService(dispatcher);
-
-  console.log(`[Config] Model: ${service.modelName}`);
-  console.log(`[Config] Privacy: Zero-Real-PII Synthetic Mode (Free-Tier Safe)\n`);
-
-  const questions = [
+async function main() {
+  if (!process.env.GEMINI_API_KEY)
+    throw new Error('GEMINI_API_KEY is not configured');
+  const service = new GeminiFunctionCallingService(syntheticDispatcher);
+  const cases = [
+    { prompt: 'Chicken and rice', privacyMode: 'generic' as const },
     {
-      id: 1,
-      text: 'How much protein have I eaten today?',
-      expectedPrimaryTool: 'getDailyNutrition',
+      prompt: 'What does protein do for muscle recovery?',
+      privacyMode: 'generic' as const,
     },
     {
-      id: 2,
-      text: 'What is my daily calorie target?',
-      expectedPrimaryTool: 'getNutritionTargets',
-    },
-    {
-      id: 3,
-      text: 'How much protein do I still need today?',
-      expectedPrimaryTool: 'getDailyNutrition', // Requires both daily + targets
-      requiresMultiTool: true,
-    },
-    {
-      id: 4,
-      text: 'What did I eat yesterday?',
-      expectedPrimaryTool: 'getDailyNutrition',
-      expectedDate: '2026-11-19',
-    },
-    {
-      id: 5,
-      text: 'How has my food intake been over the last seven days?',
-      expectedPrimaryTool: 'getFoodHistory',
-      expectedDays: 7,
+      prompt: 'How much protein should I take?',
+      privacyMode: 'personalized' as const,
     },
   ];
-
-  const currentDateStr = '2026-11-20';
-
-  for (const q of questions) {
-    console.log(`----------------------------------------------------------------`);
-    console.log(`Question ${q.id}: "${q.text}"`);
-    console.log(`----------------------------------------------------------------`);
-
-    try {
-      // 1. Live Tool Selection via Gemini
-      const selection = await service.selectTools(q.text, currentDateStr);
-
-      console.log(`  Live Model Selected Tools (${selection.functionCalls.length}):`);
-      for (const fc of selection.functionCalls) {
-        console.log(`    -> Tool: ${fc.name}`);
-        console.log(`       Args: ${JSON.stringify(fc.args)}`);
-      }
-
-      // 2. Synthetic Dispatch & Deterministic Arithmetic
-      const demoResult = await service.runSyntheticDemonstration(
-        q.text,
-        selection.functionCalls,
-      );
-
-      if (demoResult.arithmetic) {
-        console.log(`  Deterministic Arithmetic:`);
-        console.log(`    - Protein Consumed:  ${demoResult.arithmetic.consumedProteinG}g`);
-        console.log(`    - Protein Target:    ${demoResult.arithmetic.targetProteinG}g`);
-        console.log(`    - Protein Remaining: ${demoResult.arithmetic.remainingProteinG}g`);
-      }
-
-      console.log(`  Final Verified Answer:`);
-      console.log(`    "${demoResult.finalAnswer}"\n`);
-    } catch (err: any) {
-      console.error(`  ❌ Error: ${err.message}\n`);
-    }
-  }
-
-  // Demonstration of No-Data (Unlogged Day) & Failed Tool Handling
-  console.log(`----------------------------------------------------------------`);
-  console.log(`Edge Case A: No-Data / Unlogged Day Handling`);
-  console.log(`----------------------------------------------------------------`);
-  const unloggedResult = await service.runSyntheticDemonstration(
-    'What did I eat on Wednesday?',
-    [{ name: 'getDailyNutrition', args: { date: '2026-11-18' } }],
-  );
-  console.log(`  Query: "What did I eat on Wednesday?" (Unlogged day: 2026-11-18)`);
-  console.log(`  Result: "${unloggedResult.finalAnswer}"\n`);
-
-  console.log(`----------------------------------------------------------------`);
-  console.log(`Edge Case B: Failed / Unknown Tool Handling`);
-  console.log(`----------------------------------------------------------------`);
-  const failedToolResult = await dispatcher.dispatch('synthetic-demo-user-123', {
-    name: 'deleteUserProfile' as any,
-  });
-  console.log(`  Dispatched unknown tool "deleteUserProfile":`);
-  console.log(`    Success: ${failedToolResult.success}`);
-  console.log(`    Error: "${failedToolResult.error}"\n`);
-
-  console.log(`----------------------------------------------------------------`);
-  console.log(`Edge Case C: Privacy Boundary Enforcement`);
-  console.log(`----------------------------------------------------------------`);
-  try {
-    service.assertPrivacySafe({
-      userId: 'real-user-id',
-      email: 'user@gmail.com',
-      realIntake: 2200,
-      // Missing isSyntheticDemo: true
+  for (const item of cases) {
+    const result = await service.generateCoachResponse({
+      authenticatedUserId: 'synthetic-live-user',
+      prompt: item.prompt,
+      currentDate: '2026-11-22',
+      timeZone: 'Asia/Colombo',
+      privacyMode: item.privacyMode,
+      history: [],
     });
-    console.error('  ❌ FAILED: Privacy guard allowed unflagged user data!');
-  } catch (err: any) {
-    console.log(`  ✓ PASSED: Privacy guard blocked real user data: "${err.message}"\n`);
+    console.log(
+      JSON.stringify({
+        prompt: item.prompt,
+        reply: result.reply,
+        tools: result.toolResults.map((tool) => tool.tool),
+        factualSources: result.factualSources,
+        citations: result.citations,
+        model: result.modelUsed,
+      }),
+    );
   }
-
-  console.log('================================================================');
-  console.log('SMOKE TEST COMPLETE: All 5 questions and edge cases verified.');
-  console.log('================================================================\n');
 }
 
-runLiveSmokeTest().catch((err) => {
-  console.error('Unhandled smoke test error:', err);
+main().catch((error) => {
+  console.error(error?.message || error);
   process.exit(1);
 });

@@ -22,7 +22,9 @@ services:
         generateValue: true
       - key: GEMINI_API_KEY
         sync: false
-      - key: CIE_ENABLED
-        value: "true"
+      - key: GEMINI_PERSONALIZED_DATA_ENABLED
+        value: "false"
+      - key: GEMINI_PERSONALIZED_OPERATOR_CONFIRMATION
+        sync: false
       - key: FRONTEND_URL
         sync: false
