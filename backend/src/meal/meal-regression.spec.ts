@@ -546,4 +546,89 @@ describe('MealService - Diary Persistence & Integrity Regressions', () => {
       controller.updateEntry(req, 'entry-123', { loggedProteinG: 600 }),
     ).rejects.toThrow(BadRequestException);
   });
+
+  // Test 17: AI Ingredient Creator unitName validation fix
+  it('Scenario 17: Controller accepts AI-generated ingredient JSON in unitName exceeding 80 characters', async () => {
+    const req = { user: { id: testUserId } };
+
+    // AI-generated ingredient payload (which serializes to > 80 chars)
+    const aiFoodName = 'Sri Lankan Chicken Curry (Coconut Milk Base)';
+    const aiFoodUnitName = JSON.stringify({
+      name: aiFoodName,
+      ingredients: [
+        {
+          id: 'ai-1772658190000-a1b2c3d4',
+          name: aiFoodName,
+          qty: 1,
+        },
+      ],
+    });
+
+    expect(aiFoodUnitName.length).toBeGreaterThan(80);
+
+    const result = await controller.logFood(req, {
+      date: testDate,
+      meal: 'LUNCH',
+      unitName: aiFoodUnitName,
+      servingQuantity: 1,
+      loggedWeightGrams: 250,
+      loggedCaloriesKcal: 380,
+      loggedProteinG: 28,
+      loggedCarbohydratesG: 12,
+      loggedFatG: 22,
+    });
+
+    expect(result).toBeDefined();
+    expect(result.unitName).toBe(aiFoodUnitName);
+  });
+
+  // Test 18: Controller validates unitName boundaries (empty, whitespace, and excessive length)
+  it('Scenario 18: Controller rejects unitName when empty, whitespace, or exceeding 2048 characters', async () => {
+    const req = { user: { id: testUserId } };
+
+    // Empty unitName
+    await expect(
+      controller.logFood(req, {
+        date: testDate,
+        meal: 'LUNCH',
+        unitName: '',
+        servingQuantity: 1,
+        loggedWeightGrams: 100,
+        loggedCaloriesKcal: 150,
+        loggedProteinG: 10,
+        loggedCarbohydratesG: 20,
+        loggedFatG: 5,
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    // Whitespace unitName
+    await expect(
+      controller.logFood(req, {
+        date: testDate,
+        meal: 'LUNCH',
+        unitName: '   ',
+        servingQuantity: 1,
+        loggedWeightGrams: 100,
+        loggedCaloriesKcal: 150,
+        loggedProteinG: 10,
+        loggedCarbohydratesG: 20,
+        loggedFatG: 5,
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    // Over-length unitName (> 2048 characters)
+    await expect(
+      controller.logFood(req, {
+        date: testDate,
+        meal: 'LUNCH',
+        unitName: 'a'.repeat(2049),
+        servingQuantity: 1,
+        loggedWeightGrams: 100,
+        loggedCaloriesKcal: 150,
+        loggedProteinG: 10,
+        loggedCarbohydratesG: 20,
+        loggedFatG: 5,
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
 });
