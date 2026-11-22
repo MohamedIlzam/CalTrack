@@ -17,18 +17,14 @@ describe('CORS Configuration (Production Security Guard)', () => {
       process.env.NODE_ENV = 'production';
     });
 
-    it('should throw fatal error if FRONTEND_URL is undefined', () => {
+    it('should fail closed without blocking startup if FRONTEND_URL is undefined', () => {
       delete process.env.FRONTEND_URL;
-      expect(() => getCorsOrigins()).toThrow(
-        /FRONTEND_URL environment variable is required in production/i,
-      );
+      expect(getCorsOrigins()).toEqual([]);
     });
 
-    it('should throw fatal error if FRONTEND_URL is empty string or only whitespace', () => {
+    it('should fail closed without blocking startup if FRONTEND_URL is empty', () => {
       process.env.FRONTEND_URL = '   ';
-      expect(() => getCorsOrigins()).toThrow(
-        /FRONTEND_URL environment variable is required in production/i,
-      );
+      expect(getCorsOrigins()).toEqual([]);
     });
 
     it('should throw fatal error if FRONTEND_URL contains wildcard (*)', () => {

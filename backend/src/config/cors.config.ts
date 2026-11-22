@@ -1,8 +1,9 @@
 /**
  * CORS Configuration and Production Origin Validation
  *
- * In production mode, requires an explicitly configured FRONTEND_URL to prevent
- * unauthorized cross-origin access or arbitrary origin reflection.
+ * In production mode, allows only explicitly configured HTTPS origins. When
+ * FRONTEND_URL is absent, CORS fails closed without preventing the API from
+ * serving non-browser traffic such as Render health checks.
  * In development mode, allows reflection or localhost origins for seamless DX.
  */
 
@@ -12,9 +13,7 @@ export function getCorsOrigins(): string[] | boolean {
 
   if (isProduction) {
     if (!frontendUrlEnv || !frontendUrlEnv.trim()) {
-      throw new Error(
-        'FATAL: FRONTEND_URL environment variable is required in production mode to prevent unauthorized cross-origin requests. Refusing to boot application.',
-      );
+      return [];
     }
 
     const origins = frontendUrlEnv
@@ -23,9 +22,7 @@ export function getCorsOrigins(): string[] | boolean {
       .filter((origin) => origin.length > 0);
 
     if (origins.length === 0) {
-      throw new Error(
-        'FATAL: FRONTEND_URL contains no valid origins in production mode.',
-      );
+      return [];
     }
 
     // Refuse wildcard in production
