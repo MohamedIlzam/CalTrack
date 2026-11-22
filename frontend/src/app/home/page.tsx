@@ -6,14 +6,17 @@ import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
+import { AppHeader } from "@/components/ui/AppHeader";
 import { motion } from "motion/react";
 import {
   useAppStore,
   selectConsumedKcal,
   type MealSlot,
   type FoodEntry,
+  type SubIngredient,
 } from "@/store/useAppStore";
 import { fetchDailyLog, deleteMealEntry, getAuthToken } from "@/lib/api";
+import { getLocalDateString } from "@/lib/date";
 
 /* ─── Helpers ─── */
 
@@ -209,7 +212,7 @@ function formatDate(d: Date): string {
   });
 }
 
-const MEAL_ICONS: Record<MealSlot, string> = {
+const MEAL_ICONS: Partial<Record<MealSlot, string>> = {
   breakfast: "🍳",
   lunch: "🍛",
   dinner: "🌙",
@@ -217,7 +220,7 @@ const MEAL_ICONS: Record<MealSlot, string> = {
   snack: "🍪",
 };
 
-const MEAL_EMPTY_CTA: Record<MealSlot, { text: string; question: string }> = {
+const MEAL_EMPTY_CTA: Partial<Record<MealSlot, { text: string; question: string }>> = {
   breakfast: { text: "Log Breakfast", question: "What did you have for breakfast?" },
   lunch: { text: "Log Lunch", question: "What did you have for lunch?" },
   dinner: { text: "Quick Add", question: "Plan your dinner in advance" },
@@ -255,7 +258,7 @@ function CollectiveMealCard({
   entries: FoodEntry[];
   mealIcon: string;
   onDeleteEntry: (id: string) => void;
-  onEditMeal: (slot: string) => void;
+  onEditMeal: (slot: string, entryId?: string) => void;
 }) {
   const allItems = useMemo(() => {
     const list: Array<{ id: string; entryId: string; name: string; qty: number; emoji: string }> = [];
@@ -300,10 +303,10 @@ function CollectiveMealCard({
   const totalFat = entries.reduce((s, e) => s + e.fat, 0);
 
   return (
-    <div className="relative mb-3 group cursor-pointer" onClick={() => onEditMeal(slotKey)}>
+    <div className="relative mb-3 group cursor-pointer" onClick={() => onEditMeal(slotKey, entries[0]?.id)}>
       {/* Top-Right Edit Meal Button */}
       <button
-        onClick={(e) => { e.stopPropagation(); onEditMeal(slotKey); }}
+        onClick={(e) => { e.stopPropagation(); onEditMeal(slotKey, entries[0]?.id); }}
         title={`Edit ${slotLabel}`}
         className="absolute top-2.5 right-9 z-20 px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
       >
@@ -313,9 +316,14 @@ function CollectiveMealCard({
         Edit
       </button>
 
-      {/* Top-Right Card Delete Button (deletes all entries in this meal slot) */}
+      {/* Top-Right Card Delete Button (deletes all entries in this meal slot with confirmation) */}
       <button
-        onClick={(e) => { e.stopPropagation(); entries.forEach(el => onDeleteEntry(el.id)); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (window.confirm(`Are you sure you want to remove all logged foods from ${slotLabel}?`)) {
+            entries.forEach(el => onDeleteEntry(el.id));
+          }
+        }}
         title={`Delete all ${slotLabel} items`}
         className="absolute -top-2 -right-2 z-20 w-7 h-7 rounded-full bg-red-500 text-white shadow-md flex items-center justify-center opacity-90 hover:opacity-100 hover:scale-110 active:scale-95 transition-all cursor-pointer"
       >
@@ -359,7 +367,13 @@ function CollectiveMealCard({
         {/* Right Side: Scrollable List of ALL Foods in this Meal Slot */}
         <div className="w-[58%] flex flex-col gap-[6px] max-h-[125px] overflow-y-auto no-scrollbar pl-1">
           {allItems.map((item, idx) => (
-            <div key={`${item.id}-${idx}`} className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px] relative group/item" style={{ background: "rgba(255,255,255,0.12)" }}>
+            <div
+              key={`${item.id}-${idx}`}
+              onClick={(e) => { e.stopPropagation(); onEditMeal(slotKey, item.entryId); }}
+              className="bg-white/14 rounded-[14px] py-2 px-[10px] flex items-center gap-[10px] relative group/item cursor-pointer hover:bg-white/20 transition-colors"
+              title={`Click to edit ${item.name}`}
+              style={{ background: "rgba(255,255,255,0.12)" }}
+            >
               <span className="text-[18px] leading-none">{item.emoji}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-bold text-white truncate leading-tight">{item.name}</p>
@@ -428,7 +442,7 @@ export default function HomePage() {
   const removeFoodEntry = useAppStore((s) => s.removeFoodEntry);
 
   const queryClient = useQueryClient();
-  const dateIso = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const dateIso = useMemo(() => getLocalDateString(), []);
 
   const { data: dailyLog } = useQuery({
     queryKey: ['dailyLog', dateIso],
@@ -486,11 +500,16 @@ export default function HomePage() {
   }, [dailyLog]);
 
   const handleDeleteEntry = async (id: string) => {
+    const entryBackup = useAppStore.getState().entries.find((e) => e.id === id);
     removeFoodEntry(id);
     try {
       await deleteMealEntry(id);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete meal entry from backend:', err);
+      if (entryBackup) {
+        useAppStore.getState().addFoodEntry(entryBackup);
+      }
+      alert(err?.message || 'Failed to delete meal entry. Please check your connection and try again.');
     }
     queryClient.invalidateQueries({ queryKey: ['dailyLog'] });
   };
@@ -510,36 +529,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#F9F9F9] pb-[100px] font-sans pt-[72px]">
-      {/* Fixed Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 w-full px-6 py-4 bg-white/80 backdrop-blur-xl flex justify-between items-center border-b border-gray-100/50">
-        <div className="flex items-center gap-3">
-          <Link href="/profile" title="View Profile & Settings" className="w-8 h-8 rounded-full border border-[#006B5F]/20 overflow-hidden bg-[#006B5F]/10 hover:scale-105 active:scale-95 transition-all flex items-center justify-center text-[10px] text-[#006B5F] font-black">
-            {displayName.slice(0, 2).toUpperCase()}
-          </Link>
-
-          <div>
-            <h1 className="text-[18px] font-extrabold text-[#006B5F] tracking-tight leading-none mb-[2px]">
-              CalTrack
-            </h1>
-            <p className="text-[10px] font-medium text-[#3C4A46]/70 uppercase tracking-widest leading-none">
-              {todayStr}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={handleLogout}
-            title="Log Out"
-            className="text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            <span>Log Out</span>
-          </button>
-        </div>
-      </header>
+      {/* Unified Top Header with iPhone Safe Area */}
+      <AppHeader />
 
       <main className="px-6 pt-5 flex flex-col gap-6">
         {/* Greeting Section */}
@@ -695,9 +686,9 @@ export default function HomePage() {
                     slotKey={slot}
                     slotLabel={capitalize(slot)}
                     entries={mealEntries}
-                    mealIcon={MEAL_ICONS[slot]}
+                    mealIcon={MEAL_ICONS[slot] || "🍽️"}
                     onDeleteEntry={handleDeleteEntry}
-                    onEditMeal={(s) => router.push(`/search?meal=${s}`)}
+                    onEditMeal={(s, entryId) => router.push(entryId ? `/search?meal=${s}&editEntryId=${entryId}` : `/search?meal=${s}`)}
                   />
 
                   <button

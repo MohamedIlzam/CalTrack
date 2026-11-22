@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MealSlot } from '@prisma/client';
+import { parseLocalDate } from '../common/date.util';
 
 export interface LogFoodDto {
   date: string; // YYYY-MM-DD
@@ -15,15 +16,24 @@ export interface LogFoodDto {
   loggedFatG: number;
 }
 
+export interface UpdateMealEntryDto {
+  meal?: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACKS';
+  foodId?: string;
+  servingQuantity?: number;
+  unitName?: string;
+  loggedWeightGrams?: number;
+  loggedCaloriesKcal?: number;
+  loggedProteinG?: number;
+  loggedCarbohydratesG?: number;
+  loggedFatG?: number;
+}
+
 @Injectable()
 export class MealService {
   constructor(private readonly prisma: PrismaService) {}
 
   private parseLocalDate(dateStr: string): Date {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    // Create Date in local timezone context (UTC normalized to midnight of local date)
-    const date = new Date(Date.UTC(year, month - 1, day));
-    return date;
+    return parseLocalDate(dateStr);
   }
 
   async getDailyLog(userId: string, dateStr: string) {
@@ -119,29 +129,73 @@ export class MealService {
     });
   }
 
-  async deleteEntry(userId: string, entryId: string) {
-    try {
-      const entry = await this.prisma.mealLogEntry.findUnique({
-        where: { id: entryId },
-        include: { mealLog: true },
-      });
+  async updateEntry(userId: string, entryId: string, dto: UpdateMealEntryDto) {
+    const entry = await this.prisma.mealLogEntry.findUnique({
+      where: { id: entryId },
+      include: { mealLog: true },
+    });
 
-      if (!entry) {
-        return { success: true, message: 'Meal log entry already removed' };
-      }
-
-      if (entry.mealLog.userId !== userId) {
-        throw new ForbiddenException('You do not have permission to delete this entry');
-      }
-
-      await this.prisma.mealLogEntry.delete({
-        where: { id: entryId },
-      });
-
-      return { success: true };
-    } catch (err) {
-      if (err instanceof ForbiddenException) throw err;
-      return { success: true, message: 'Cleaned up' };
+    if (!entry) {
+      throw new NotFoundException('Meal log entry not found');
     }
+
+    if (entry.mealLog.userId !== userId) {
+      throw new ForbiddenException('You do not have permission to edit this entry');
+    }
+
+    let validFoodId: string | null | undefined = undefined;
+    if (dto.foodId !== undefined) {
+      if (dto.foodId) {
+        try {
+          const existingFood = await this.prisma.food.findUnique({
+            where: { id: dto.foodId },
+          });
+          validFoodId = existingFood ? existingFood.id : null;
+        } catch {
+          validFoodId = null;
+        }
+      } else {
+        validFoodId = null;
+      }
+    }
+
+    return this.prisma.mealLogEntry.update({
+      where: { id: entryId },
+      data: {
+        ...(dto.meal ? { meal: dto.meal } : {}),
+        ...(validFoodId !== undefined ? { foodId: validFoodId } : {}),
+        ...(dto.servingQuantity !== undefined ? { servingQuantity: dto.servingQuantity } : {}),
+        ...(dto.unitName !== undefined ? { unitName: dto.unitName } : {}),
+        ...(dto.loggedWeightGrams !== undefined ? { loggedWeightGrams: dto.loggedWeightGrams } : {}),
+        ...(dto.loggedCaloriesKcal !== undefined ? { loggedCaloriesKcal: dto.loggedCaloriesKcal } : {}),
+        ...(dto.loggedProteinG !== undefined ? { loggedProteinG: dto.loggedProteinG } : {}),
+        ...(dto.loggedCarbohydratesG !== undefined ? { loggedCarbohydratesG: dto.loggedCarbohydratesG } : {}),
+        ...(dto.loggedFatG !== undefined ? { loggedFatG: dto.loggedFatG } : {}),
+      },
+      include: {
+        food: true,
+      },
+    });
+  }
+
+  async deleteEntry(userId: string, entryId: string) {
+    const entry = await this.prisma.mealLogEntry.findUnique({
+      where: { id: entryId },
+      include: { mealLog: true },
+    });
+
+    if (!entry) {
+      throw new NotFoundException('Meal log entry not found');
+    }
+
+    if (entry.mealLog.userId !== userId) {
+      throw new ForbiddenException('You do not have permission to delete this entry');
+    }
+
+    await this.prisma.mealLogEntry.delete({
+      where: { id: entryId },
+    });
+
+    return { success: true };
   }
 }

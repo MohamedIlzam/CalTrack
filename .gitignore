@@ -1,2 +1,46 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.*
+
+# Build outputs
+/backend/dist/
+/backend/generated/
+/backend/prisma/seed.js
+/frontend/.next/
+/frontend/out/
+/frontend/build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Logs and debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+*.pem
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
+frontend/next-env.d.ts
+
+# Temporary / analysis scratch files
+*_details.json
+repos_overview.json
+scratch/
+
+# Local docs & progress notes
 /docs/
 /progress.md

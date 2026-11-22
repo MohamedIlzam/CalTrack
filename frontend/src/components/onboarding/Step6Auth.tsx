@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 import { useOnboardingDraft } from "./OnboardingFlow";
 import { useAppStore } from "@/store/useAppStore";
 import { useRouter } from "next/navigation";
+import { getApiBaseUrl, fetchWithTimeout } from "@/lib/api";
 
 interface Props {
   onBack: () => void;
@@ -42,14 +43,14 @@ export function Step6Auth({ onBack, initialMode = "register" }: Props) {
             password,
           };
 
-      const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
-      const response = await fetch(`http://${hostname}:3001/auth/${endpoint}`, {
+      const baseUrl = getApiBaseUrl();
+      const response = await fetchWithTimeout(`${baseUrl}/auth/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
-      });
+      }, 15000);
 
       const data = await response.json();
 

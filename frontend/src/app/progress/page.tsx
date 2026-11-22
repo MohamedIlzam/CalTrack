@@ -1,882 +1,993 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
-import { useAppStore, selectConsumedKcal } from "@/store/useAppStore";
+import { AppHeader } from "@/components/ui/AppHeader";
+import { AuthGuard } from "@/components/auth/AuthGuard";
+import { useAppStore } from "@/store/useAppStore";
 import {
   fetchWeightHistory,
   postWeightLog,
   fetchAdherence,
+  fetchUserProfile,
   type WeightEntry,
   type AdherenceDay,
-  getAuthToken,
+  type UserProfile,
 } from "@/lib/api";
+import { calculateBmi } from "@/lib/nutrition";
+import { getLocalDateString } from "@/lib/date";
 
-export default function ProgressPage() {
+function ProgressContent() {
   const queryClient = useQueryClient();
-  const weightKg = useAppStore(s => s.weightKg) || 68.3;
-  const targetWeightKg = useAppStore(s => s.targetWeightKg) || 66.0;
-  const heightCm = useAppStore(s => s.heightCm) || 168;
-  const targetCalories = useAppStore(s => s.targetCalories) || 1850;
-  const setOnboarding = useAppStore(s => s.setOnboarding);
-  
-  const consumed = useAppStore(selectConsumedKcal);
-  const consumedCarbs = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.carbs, 0));
-  const consumedProtein = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.protein, 0));
-  const consumedFat = useAppStore((s) => s.entries.filter(e => e.meal !== "saved_meals").reduce((sum, e) => sum + e.fat, 0));
 
-  // State to track the active time period in the Calorie Adherence section
-  const [caloriePeriod, setCaloriePeriod] = useState<"today" | "yesterday" | "7days" | "month">("7days");
-  // State to track the active macro filter in the Macro Trends section
-  const [activeMacro, setActiveMacro] = useState<"carbs" | "protein" | "fat">("carbs");
+  // Zustand Store Fallbacks
+  const storeWeightKg = useAppStore((s) => s.weightKg);
+  const storeTargetWeightKg = useAppStore((s) => s.targetWeightKg);
+  const storeHeightCm = useAppStore((s) => s.heightCm);
+  const storeTargetCalories = useAppStore((s) => s.targetCalories);
+  const storeTargetProteinG = useAppStore((s) => s.targetProteinG);
+  const storeTargetCarbsG = useAppStore((s) => s.targetCarbsG);
+  const storeTargetFatG = useAppStore((s) => s.targetFatG);
+  const setOnboarding = useAppStore((s) => s.setOnboarding);
 
-  // Modal state
+  // Time range selection: 7 days or 30 days
+  const [range, setRange] = useState<7 | 30>(7);
+  // Active macro tab for detailed macro breakdown
+  const [activeMacro, setActiveMacro] = useState<"protein" | "carbs" | "fat">("protein");
+  // Interactive day selection in charts
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // Log weight modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [weightInput, setWeightInput] = useState(weightKg.toString());
-  const [submitting, setSubmitting] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
+  const [weightInput, setWeightInput] = useState("");
+  const [submittingWeight, setSubmittingWeight] = useState(false);
+  const [weightError, setWeightError] = useState<string | null>(null);
 
-  // 1. Live Weight History Query
-  const { data: weightHistory = [] } = useQuery<WeightEntry[]>({
-    queryKey: ['weightHistory'],
+  // 1. Fetch User Profile
+  const { data: profile } = useQuery<UserProfile | null>({
+    queryKey: ["userProfile"],
+    queryFn: fetchUserProfile,
+  });
+
+  // Effective user metrics
+  const weightKg = profile?.weightKg ?? (storeWeightKg > 0 ? storeWeightKg : 68.5);
+  const targetWeightKg = profile?.targetWeightKg ?? (storeTargetWeightKg > 0 ? storeTargetWeightKg : 65.0);
+  const heightCm = profile?.heightCm ?? (storeHeightCm > 0 ? storeHeightCm : 168);
+  const targetCalories = profile?.targetCalories ?? (storeTargetCalories > 0 ? storeTargetCalories : 1850);
+  const targetProteinG = profile?.targetProteinG ?? (storeTargetProteinG > 0 ? storeTargetProteinG : 115);
+  const targetCarbsG = profile?.targetCarbsG ?? (storeTargetCarbsG > 0 ? storeTargetCarbsG : 208);
+  const targetFatG = profile?.targetFatG ?? (storeTargetFatG > 0 ? storeTargetFatG : 62);
+
+  // 2. Fetch Adherence Data for Selected Range
+  const {
+    data: adherenceDays = [],
+    isLoading: isAdherenceLoading,
+    isError: isAdherenceError,
+    refetch: refetchAdherence,
+  } = useQuery<AdherenceDay[]>({
+    queryKey: ["adherence", range],
+    queryFn: () => fetchAdherence(range),
+  });
+
+  // 3. Fetch Real Weight History
+  const {
+    data: weightHistory = [],
+    isLoading: isWeightLoading,
+    refetch: refetchWeight,
+  } = useQuery<WeightEntry[]>({
+    queryKey: ["weightHistory"],
     queryFn: fetchWeightHistory,
   });
 
-  // 2. Live Adherence Query
-  const daysLimit = caloriePeriod === "month" ? 30 : 7;
-  const { data: adherenceDays = [] } = useQuery<AdherenceDay[]>({
-    queryKey: ['adherence', daysLimit],
-    queryFn: () => fetchAdherence(daysLimit),
-  });
+  // BMI calculation
+  const bmiInfo = useMemo(() => calculateBmi(weightKg, heightCm), [weightKg, heightCm]);
+  const bmiPos = useMemo(() => {
+    if (!bmiInfo.numericBmi) return 50;
+    // Map BMI range [15, 35] to [0%, 100%]
+    return Math.min(96, Math.max(4, ((bmiInfo.numericBmi - 15) / 20) * 100));
+  }, [bmiInfo]);
 
-  // Synchronize input when weightKg changes
-  useEffect(() => {
-    setWeightInput(weightKg.toString());
-  }, [weightKg]);
+  // Derived Analytics from Adherence Days
+  const analytics = useMemo(() => {
+    const totalDays = adherenceDays.length || range;
+    const loggedDays = adherenceDays.filter((d) => d.logged);
+    const loggedCount = loggedDays.length;
+    const unloggedCount = Math.max(0, totalDays - loggedCount);
 
+    const consistencyPct = totalDays > 0 ? Math.round((loggedCount / totalDays) * 100) : 0;
+
+    let avgCalories: number | null = null;
+    let avgProtein: number | null = null;
+    let avgCarbs: number | null = null;
+    let avgFat: number | null = null;
+    let caloriesDelta: number | null = null;
+
+    if (loggedCount > 0) {
+      const sumKcal = loggedDays.reduce((acc, d) => acc + d.calories, 0);
+      const sumP = loggedDays.reduce((acc, d) => acc + d.protein, 0);
+      const sumC = loggedDays.reduce((acc, d) => acc + d.carbs, 0);
+      const sumF = loggedDays.reduce((acc, d) => acc + d.fat, 0);
+
+      avgCalories = Math.round(sumKcal / loggedCount);
+      avgProtein = Math.round((sumP / loggedCount) * 10) / 10;
+      avgCarbs = Math.round((sumC / loggedCount) * 10) / 10;
+      avgFat = Math.round((sumF / loggedCount) * 10) / 10;
+      caloriesDelta = avgCalories - targetCalories;
+    }
+
+    // Days logged within/under target
+    const withinTargetCount = loggedDays.filter((d) => d.calories <= targetCalories).length;
+    const targetAdherencePct = loggedCount > 0 ? Math.round((withinTargetCount / loggedCount) * 100) : 0;
+
+    // Macro Ratio Percentages
+    let proteinRatio = 25;
+    let carbsRatio = 45;
+    let fatRatio = 30;
+
+    if (avgProtein !== null && avgCarbs !== null && avgFat !== null) {
+      const pKcal = avgProtein * 4;
+      const cKcal = avgCarbs * 4;
+      const fKcal = avgFat * 9;
+      const totalKcal = pKcal + cKcal + fKcal;
+      if (totalKcal > 0) {
+        proteinRatio = Math.round((pKcal / totalKcal) * 100);
+        carbsRatio = Math.round((cKcal / totalKcal) * 100);
+        fatRatio = Math.max(0, 100 - proteinRatio - carbsRatio);
+      }
+    }
+
+    return {
+      totalDays,
+      loggedCount,
+      unloggedCount,
+      consistencyPct,
+      avgCalories,
+      avgProtein,
+      avgCarbs,
+      avgFat,
+      caloriesDelta,
+      withinTargetCount,
+      targetAdherencePct,
+      proteinRatio,
+      carbsRatio,
+      fatRatio,
+    };
+  }, [adherenceDays, range, targetCalories]);
+
+  // Selected Day Details for Interactive Chart
+  const selectedDayInfo = useMemo(() => {
+    if (adherenceDays.length === 0) return null;
+    if (selectedDate) {
+      const found = adherenceDays.find((d) => d.date === selectedDate);
+      if (found) return found;
+    }
+    // Default to the latest day in the list
+    return adherenceDays[adherenceDays.length - 1];
+  }, [adherenceDays, selectedDate]);
+
+  // Handle Weight Log Submission
   const handleLogWeight = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(weightInput);
-    if (isNaN(val) || val <= 0) {
-      setModalError("Please enter a valid weight in kg");
+    if (isNaN(val) || val < 10 || val > 300) {
+      setWeightError("Please enter a valid weight between 10 kg and 300 kg");
       return;
     }
-    setSubmitting(true);
-    setModalError(null);
+
+    setSubmittingWeight(true);
+    setWeightError(null);
     try {
       await postWeightLog(val);
       setOnboarding({ weightKg: val });
-      queryClient.invalidateQueries({ queryKey: ['weightHistory'] });
+      queryClient.invalidateQueries({ queryKey: ["weightHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
       setIsModalOpen(false);
+      setWeightInput("");
     } catch (err: any) {
-      setModalError(err.message || "Something went wrong.");
+      setWeightError(err.message || "Failed to save weight entry.");
     } finally {
-      setSubmitting(false);
+      setSubmittingWeight(false);
     }
   };
 
-  const diff = Math.abs(weightKg - targetWeightKg).toFixed(1);
-
-  // Dynamic adherence calculations from backend log data
-  const { todayKcal, yesterdayKcal, avg7Days, avgMonth } = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
-
-    const todayDay = adherenceDays.find(d => d.date === todayStr);
-    const yesterdayDay = adherenceDays.find(d => d.date === yesterdayStr);
-
-    const tKcal = todayDay && todayDay.logged ? todayDay.calories : consumed;
-    const yKcal = yesterdayDay && yesterdayDay.logged ? yesterdayDay.calories : 0;
-
-    const logged7 = adherenceDays.filter(d => d.logged);
-    const sum7 = logged7.reduce((sum, d) => sum + d.calories, 0);
-    const a7 = logged7.length > 0 ? Math.round(sum7 / logged7.length) : consumed;
-
-    const sumMonth = adherenceDays.reduce((sum, d) => sum + d.calories, 0);
-    const aMonth = adherenceDays.length > 0 ? Math.round(sumMonth / adherenceDays.length) : consumed;
-
-    return {
-      todayKcal: tKcal,
-      yesterdayKcal: yKcal,
-      avg7Days: a7,
-      avgMonth: aMonth,
-    };
-  }, [adherenceDays, consumed]);
-
-  const caloriePeriodData = {
-    today: {
-      label: "Consumed Today",
-      kcal: todayKcal,
-    },
-    yesterday: {
-      label: "Consumed Yesterday",
-      kcal: yesterdayKcal,
-    },
-    "7days": {
-      label: "7-Day Average",
-      kcal: avg7Days,
-    },
-    month: {
-      label: "Monthly Average",
-      kcal: avgMonth,
+  // Helper: Format Date for Chart Labels
+  const formatDayLabel = (dateStr: string, isShort: boolean = false) => {
+    const parts = dateStr.split("-");
+    if (parts.length < 3) return dateStr;
+    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    if (isShort) {
+      return d.toLocaleDateString("en-US", { weekday: "narrow" });
     }
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   };
 
-  const calorieChartData = useMemo(() => {
-    const days = adherenceDays.slice(-7);
-    const defaultBars = [
-      { label: "M", kcal: 0, height: "15%", color: "bg-primary/30" },
-      { label: "T", kcal: 0, height: "15%", color: "bg-primary/30" },
-      { label: "W", kcal: 0, height: "15%", color: "bg-primary/30" },
-      { label: "T", kcal: 0, height: "15%", color: "bg-primary/30" },
-      { label: "F", kcal: 0, height: "15%", color: "bg-primary/30" },
-      { label: "S", kcal: 0, height: "15%", color: "bg-primary/30" },
-      { label: "S", kcal: 0, height: "15%", color: "bg-primary/30" },
-    ];
+  // Calculate Weight Difference
+  const weightDiff = Math.abs(weightKg - targetWeightKg).toFixed(1);
+  const weightDiffAction = weightKg > targetWeightKg ? "to lose" : "to gain";
 
-    if (days.length === 0) return { today: [], yesterday: [], "7days": defaultBars, month: [] };
+  // SVG Chart Geometry for Weight History (only when >= 2 entries)
+  const weightSvg = useMemo(() => {
+    if (weightHistory.length < 2) return null;
 
-    const dynamicBars = days.map((d) => {
-      const dayName = new Date(d.date).toLocaleDateString("en-US", { weekday: "narrow" });
-      const hPct = targetCalories > 0 ? Math.min(100, Math.max(10, Math.round((d.calories / targetCalories) * 100))) : 15;
-      const isOver = d.calories > targetCalories;
-      return {
-        label: dayName,
-        kcal: d.calories,
-        height: `${hPct}%`,
-        color: isOver ? "bg-error/40" : "bg-primary",
-      };
-    });
+    const weights = weightHistory.map((w) => w.weightKg);
+    const minW = Math.max(0, Math.min(...weights, targetWeightKg) - 2);
+    const maxW = Math.max(...weights, targetWeightKg) + 2;
+    const rangeW = maxW - minW || 1;
+
+    const width = 320;
+    const height = 120;
+    const padding = 16;
+
+    const getX = (idx: number) => padding + (idx / (weights.length - 1)) * (width - 2 * padding);
+    const getY = (w: number) => height - padding - ((w - minW) / rangeW) * (height - 2 * padding);
+
+    const points = weights.map((w, i) => ({
+      x: getX(i),
+      y: getY(w),
+      weight: w,
+      date: weightHistory[i].recordedAt,
+    }));
+
+    const pathData = points.reduce((acc, pt, i) => {
+      return i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`;
+    }, "");
+
+    const targetY = getY(targetWeightKg);
+
+    const netChange = (weights[weights.length - 1] - weights[0]).toFixed(1);
 
     return {
-      today: dynamicBars.slice(-1),
-      yesterday: dynamicBars.slice(-2, -1),
-      "7days": dynamicBars,
-      month: dynamicBars,
+      points,
+      pathData,
+      targetY,
+      minW: minW.toFixed(0),
+      maxW: maxW.toFixed(0),
+      netChange,
+      firstDate: new Date(weightHistory[0].recordedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      lastDate: new Date(weightHistory[weightHistory.length - 1].recordedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     };
-  }, [adherenceDays, targetCalories]);
-
-  const macroChartData = useMemo(() => {
-    const days = adherenceDays.slice(-7);
-    const getBars = (key: "carbs" | "protein" | "fat") => {
-      if (days.length === 0) {
-        return [
-          { label: "Mon", height: "40%" },
-          { label: "Tue", height: "50%" },
-          { label: "Wed", height: "60%" },
-          { label: "Thu", height: "45%" },
-          { label: "Fri", height: "70%" },
-          { label: "Sat", height: "65%" },
-          { label: "Sun", height: "80%" },
-        ];
-      }
-      const maxVal = Math.max(...days.map(d => d[key]), 10);
-      return days.map(d => {
-        const label = new Date(d.date).toLocaleDateString("en-US", { weekday: "short" });
-        const hPct = Math.min(100, Math.max(15, Math.round((d[key] / maxVal) * 100)));
-        return { label, height: `${hPct}%` };
-      });
-    };
-
-    return {
-      carbs: {
-        description: `Carbohydrate intake over recent days based on logged meals.`,
-        bars: getBars("carbs"),
-      },
-      protein: {
-        description: `Protein intake tracking across logged Sri Lankan meals.`,
-        bars: getBars("protein"),
-      },
-      fat: {
-        description: `Fat intake distribution over the selected period.`,
-        bars: getBars("fat"),
-      },
-    };
-  }, [adherenceDays]);
-  const diffText = weightKg > targetWeightKg ? "kg to lose" : "kg to gain";
-  
-  const bmi = (weightKg / Math.pow(heightCm / 100, 2)).toFixed(1);
-  const bmiValue = parseFloat(bmi);
-  const bmiPos = Math.min(95, Math.max(5, ((bmiValue - 15) / 15) * 100));
-
-  // Dynamic weight chart math
-  const weights = weightHistory.map(entry => entry.weightKg);
-  const allWeights = weights.length > 0 ? weights : [weightKg];
-  const maxW = Math.max(...allWeights, targetWeightKg) + 2;
-  const minW = Math.max(0, Math.min(...allWeights, targetWeightKg) - 2);
-
-  const getX = (index: number, total: number) => {
-    if (total <= 1) return 150;
-    return (index / (total - 1)) * 300;
-  };
-
-  const getY = (w: number) => {
-    const range = maxW - minW;
-    if (range === 0) return 50;
-    return 85 - ((w - minW) / range) * 70;
-  };
-
-  const graphPoints = allWeights.map((w, idx) => ({
-    x: getX(idx, allWeights.length),
-    y: getY(w),
-  }));
-
-  const pathD = graphPoints.reduce((acc, pt, idx) => {
-    if (idx === 0) return `M ${pt.x} ${pt.y}`;
-    return `${acc} L ${pt.x} ${pt.y}`;
-  }, "");
-
-  const targetY = getY(targetWeightKg);
-
-  const startWeight = weightHistory.length > 0 ? weightHistory[0].weightKg : weightKg;
-  const totalChangeNeeded = Math.abs(startWeight - targetWeightKg);
-  const currentChangeDone = Math.abs(startWeight - weightKg);
-  const progressPercent = totalChangeNeeded > 0 
-    ? Math.min(100, Math.max(5, Math.round((currentChangeDone / totalChangeNeeded) * 100)))
-    : 100;
+  }, [weightHistory, targetWeightKg]);
 
   return (
-    <div className="min-h-screen font-body antialiased bg-background text-on-surface pb-[100px]">
-      {/* Top App Bar */}
-      <header className="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-md flex justify-between items-center px-6 py-4">
-        <div className="flex items-center gap-4">
-          <button className="hover:bg-zinc-100 transition-colors p-2 rounded-full scale-95 active:scale-90 flex items-center justify-center">
-            <span className="material-symbols-outlined text-primary">menu</span>
-          </button>
-          <h1 className="font-headline font-bold text-lg tracking-tight text-on-surface">
-            My Progress
-          </h1>
-        </div>
-        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container scale-95 active:scale-90 transition-transform cursor-pointer">
-          <img
-            alt="Profile"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAujlvrvnLYDmjfK8wThE9IUvMJyD8lUYYY4XzMUzklL80Ipd5DIJptPFWcNt3t4YX8hyJO4SBQqSRsxWehrvALDdHARXL8Lxopfwn4ksE5yaD-tKcn4bsggsbg3aPG9_8PxQ6yTTMo1Ponv1EQnza6SCyBPYdXs8SuLZFGTQfLakQtph2CGLJOeaTtSkux9MA_bZlpNHjP7Z6kNNwRdt_Zg_BzKqTKxJ73oGfE66CedBugY5vHp31GdcCaYWNNYSNaku2TZMp9YjE"
-            className="w-full h-full object-cover"
-          />
-        </div>
-      </header>
+    <div className="min-h-screen font-sans bg-[#F9FAFB] text-[#1A1C1C] pb-28 pt-[72px]">
+      {/* Unified Top Header with iPhone Safe Area */}
+      <AppHeader />
 
-      <main className="pt-24 px-6 max-w-2xl mx-auto space-y-8">
-        {/* Weight Progress Hero (New Graph UI) */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-[#4CE4C8] to-[#40DFCD] rounded-[32px] p-6 text-[#085C50] shadow-sm mb-2">
-          {/* Top Decorative Glow */}
-          <div className="absolute -right-20 -top-20 w-48 h-48 bg-white rounded-full blur-3xl opacity-20"></div>
+      <main className="max-w-2xl mx-auto px-5 pt-6 space-y-6">
+        {/* Progress & Analytics Title + Range Toggle */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-headline font-black text-xl tracking-tight text-[#1A1C1C]">
+              Progress & Analytics
+            </h1>
+            <p className="text-xs font-semibold text-[#006B5F] mt-0.5">
+              CalTrack Nutrition Intelligence
+            </p>
+          </div>
 
-          <div className="relative z-10">
-            <div className="flex justify-between items-start mb-3 mt-1">
-              <div>
-                <p className="font-headline font-bold text-[10px] tracking-[0.15em] uppercase opacity-80 mb-2">
-                  Total Progress
-                </p>
-                <div className="flex items-baseline gap-1.5">
-                  <h2 className="font-headline font-extrabold text-[46px] tracking-tighter leading-none">
-                    {diff}
-                  </h2>
-                  <span className="font-headline font-bold text-[13px] tracking-wide uppercase opacity-90">
-                    {diffText}
+          {/* Date Range Selector Pill */}
+          <div className="flex bg-gray-100 p-1 rounded-xl">
+            <button
+              onClick={() => {
+                setRange(7);
+                setSelectedDate(null);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                range === 7
+                  ? "bg-[#006B5F] text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              7 Days
+            </button>
+            <button
+              onClick={() => {
+                setRange(30);
+                setSelectedDate(null);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                range === 30
+                  ? "bg-[#006B5F] text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              30 Days
+            </button>
+          </div>
+        </div>
+        {/* Loading Skeleton */}
+        {isAdherenceLoading && (
+          <div className="space-y-4 animate-pulse">
+            <div className="h-28 bg-gray-200 rounded-3xl" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-24 bg-gray-200 rounded-2xl" />
+              <div className="h-24 bg-gray-200 rounded-2xl" />
+            </div>
+            <div className="h-64 bg-gray-200 rounded-3xl" />
+          </div>
+        )}
+
+        {/* Error Retry State */}
+        {isAdherenceError && !isAdherenceLoading && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-5 text-center space-y-3">
+            <p className="text-sm font-bold text-red-600">
+              Unable to load progress analytics
+            </p>
+            <button
+              onClick={() => {
+                refetchAdherence();
+                refetchWeight();
+              }}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!isAdherenceLoading && !isAdherenceError && (
+          <>
+            {/* Overview KPI Cards (2x2 Grid) */}
+            <section className="grid grid-cols-2 gap-3">
+              {/* 1. Avg Calories */}
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-gray-500 mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider">
+                      Avg Daily Calories
+                    </span>
+                    <span className="w-2 h-2 rounded-full bg-[#006B5F]" />
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="font-headline font-black text-2xl text-[#1A1C1C]">
+                      {analytics.avgCalories !== null
+                        ? analytics.avgCalories.toLocaleString()
+                        : "—"}
+                    </span>
+                    {analytics.avgCalories !== null && (
+                      <span className="text-xs font-bold text-gray-400">kcal</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-gray-50">
+                  {analytics.avgCalories !== null && analytics.caloriesDelta !== null ? (
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-[11px] font-bold ${
+                          analytics.caloriesDelta <= 0
+                            ? "text-[#006B5F]"
+                            : "text-amber-600"
+                        }`}
+                      >
+                        {analytics.caloriesDelta <= 0
+                          ? `${Math.abs(analytics.caloriesDelta)} kcal under target`
+                          : `${analytics.caloriesDelta} kcal over target`}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] font-medium text-gray-400">
+                      No days logged in range
+                    </span>
+                  )}
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    Target: {targetCalories.toLocaleString()} kcal
+                  </p>
+                </div>
+              </div>
+
+              {/* 2. Logging Consistency */}
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-gray-500 mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider">
+                      Logging Consistency
+                    </span>
+                    <span className="w-2 h-2 rounded-full bg-[#2DD4BF]" />
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="font-headline font-black text-2xl text-[#1A1C1C]">
+                      {analytics.loggedCount}
+                    </span>
+                    <span className="text-xs font-bold text-gray-400">
+                      / {analytics.totalDays} days
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-gray-50 space-y-1.5">
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#006B5F] rounded-full transition-all duration-500"
+                      style={{ width: `${analytics.consistencyPct}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-bold text-gray-400">
+                    <span>{analytics.consistencyPct}% tracked</span>
+                    <span>
+                      {analytics.unloggedCount > 0
+                        ? `${analytics.unloggedCount} unlogged`
+                        : "All logged"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Avg Protein */}
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-gray-500 mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider">
+                      Avg Daily Protein
+                    </span>
+                    <span className="w-2 h-2 rounded-full bg-teal-500" />
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="font-headline font-black text-2xl text-[#1A1C1C]">
+                      {analytics.avgProtein !== null ? `${analytics.avgProtein}g` : "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-gray-50">
+                  <p className="text-[11px] font-bold text-gray-600">
+                    Goal: {targetProteinG}g / day
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {analytics.avgProtein !== null
+                      ? `${Math.round((analytics.avgProtein / targetProteinG) * 100)}% of protein target`
+                      : "No meal entries recorded"}
+                  </p>
+                </div>
+              </div>
+
+              {/* 4. Target Adherence */}
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-gray-500 mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider">
+                      Target Adherence
+                    </span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="font-headline font-black text-2xl text-[#1A1C1C]">
+                      {analytics.loggedCount > 0
+                        ? `${analytics.withinTargetCount} / ${analytics.loggedCount}`
+                        : "—"}
+                    </span>
+                    <span className="text-xs font-bold text-gray-400">days</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-gray-50">
+                  <p className="text-[11px] font-bold text-[#006B5F]">
+                    {analytics.loggedCount > 0
+                      ? `${analytics.targetAdherencePct}% within budget`
+                      : "Awaiting logs"}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {analytics.loggedCount > 0
+                      ? "Of tracked calendar days"
+                      : "Unlogged days excluded"}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* Calorie Intake vs Target Interactive Chart */}
+            <section className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-headline font-bold text-base text-[#1A1C1C]">
+                    Calorie Intake vs Target
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Daily totals with clear unlogged day distinction
+                  </p>
+                </div>
+                <div className="bg-[#006B5F]/10 text-[#006B5F] px-3 py-1 rounded-full text-xs font-bold">
+                  Target: {targetCalories.toLocaleString()} kcal
+                </div>
+              </div>
+
+              {/* Bar Chart Container */}
+              <div className="relative pt-6 pb-2">
+                {/* Horizontal Dashed Reference Line for Target Calories */}
+                <div
+                  className="absolute inset-x-0 border-t-2 border-dashed border-[#006B5F]/30 pointer-events-none z-10 flex justify-end pr-1"
+                  style={{ top: "35%" }}
+                >
+                  <span className="text-[9px] font-extrabold text-[#006B5F] bg-white/90 px-1 -translate-y-2.5 rounded">
+                    Goal: {targetCalories}
                   </span>
                 </div>
+
+                {/* Bars Grid */}
+                <div
+                  className={`flex items-end justify-between gap-1.5 h-44 px-1 ${
+                    range === 30 ? "gap-0.5" : "gap-2"
+                  }`}
+                >
+                  {adherenceDays.map((day) => {
+                    const isSelected = selectedDayInfo?.date === day.date;
+                    const isOver = day.logged && day.calories > targetCalories;
+                    // Max height scaling based on 1.3x target
+                    const maxScale = Math.max(targetCalories * 1.3, 2400);
+                    const heightPercent = day.logged
+                      ? Math.min(100, Math.max(14, Math.round((day.calories / maxScale) * 100)))
+                      : 12;
+
+                    return (
+                      <button
+                        key={day.date}
+                        type="button"
+                        onClick={() => setSelectedDate(day.date)}
+                        className="group flex-1 flex flex-col items-center h-full justify-end cursor-pointer outline-none focus:outline-none"
+                      >
+                        {/* The Bar */}
+                        <div
+                          className={`w-full rounded-t-lg transition-all duration-300 relative flex items-start justify-center ${
+                            !day.logged
+                              ? "bg-gray-100 border-2 border-dashed border-gray-300 opacity-60 group-hover:opacity-100"
+                              : isOver
+                              ? "bg-gradient-to-t from-amber-500 to-rose-500 shadow-sm"
+                              : "bg-gradient-to-t from-[#006B5F] to-[#2DD4BF] shadow-sm"
+                          } ${isSelected ? "ring-2 ring-offset-2 ring-[#006B5F]" : ""}`}
+                          style={{ height: `${heightPercent}%` }}
+                        >
+                          {!day.logged && range === 7 && (
+                            <span className="text-[8px] font-extrabold text-gray-400 mt-1">
+                              —
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Label below bar */}
+                        <span
+                          className={`text-[9px] font-bold mt-2 truncate ${
+                            isSelected ? "text-[#006B5F]" : "text-gray-400"
+                          }`}
+                        >
+                          {range === 7
+                            ? formatDayLabel(day.date, true)
+                            : parseInt(day.date.split("-")[2], 10) % 5 === 0 || day.date === getLocalDateString()
+                            ? day.date.split("-")[2]
+                            : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap items-center justify-center gap-4 pt-4 border-t border-gray-100 text-[11px] font-bold text-gray-500">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#006B5F]" />
+                    <span>Under Target</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />
+                    <span>Over Target</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-gray-100 border border-dashed border-gray-400" />
+                    <span>Unlogged Day</span>
+                  </div>
+                </div>
               </div>
-              <div className="text-right pt-7">
-                <span className="font-headline font-bold text-[11px] opacity-80 uppercase tracking-widest">
-                  Target: {targetWeightKg} kg
+
+              {/* Selected Day Detail Inspection Box */}
+              {selectedDayInfo && (
+                <div className="bg-[#F0FDFA] border border-[#CCFBF1] rounded-2xl p-4 transition-all">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0F766E]">
+                        {formatDayLabel(selectedDayInfo.date)}
+                      </span>
+                      <h4 className="font-headline font-black text-lg text-[#1A1C1C] mt-0.5">
+                        {selectedDayInfo.logged
+                          ? `${selectedDayInfo.calories.toLocaleString()} kcal`
+                          : "Unlogged Day"}
+                      </h4>
+                    </div>
+
+                    {selectedDayInfo.logged ? (
+                      <div
+                        className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          selectedDayInfo.calories <= targetCalories
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {selectedDayInfo.calories <= targetCalories
+                          ? `${targetCalories - selectedDayInfo.calories} kcal under goal`
+                          : `${selectedDayInfo.calories - targetCalories} kcal over goal`}
+                      </div>
+                    ) : (
+                      <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                        No Meals Recorded
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedDayInfo.logged ? (
+                    <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-[#CCFBF1]/60 text-center">
+                      <div className="bg-white/70 rounded-xl py-1.5">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Protein</span>
+                        <p className="font-black text-sm text-[#006B5F]">{selectedDayInfo.protein}g</p>
+                      </div>
+                      <div className="bg-white/70 rounded-xl py-1.5">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Carbs</span>
+                        <p className="font-black text-sm text-amber-600">{selectedDayInfo.carbs}g</p>
+                      </div>
+                      <div className="bg-white/70 rounded-xl py-1.5">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Fat</span>
+                        <p className="font-black text-sm text-rose-500">{selectedDayInfo.fat}g</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Unlogged days are excluded from your averages to keep your daily nutritional statistics honest.
+                    </p>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* Macronutrient Intake Trends & Ratio */}
+            <section className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-headline font-bold text-base text-[#1A1C1C]">
+                    Macronutrient Intake Trends
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Real consumption across logged Sri Lankan meals
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                  Logged Averages
                 </span>
               </div>
-            </div>
 
-            {/* Progress Bar */}
-            <div className="w-full h-3.5 bg-[#A1ECD9]/60 rounded-full mb-10 overflow-hidden drop-shadow-sm shadow-inner relative">
-              <div 
-                className="absolute left-0 top-0 h-full bg-[#085C50] rounded-full shadow-lg transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
-              ></div>
-            </div>
+              {/* Macro Switcher Tabs */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  {
+                    key: "protein",
+                    label: "Protein",
+                    val: analytics.avgProtein,
+                    target: targetProteinG,
+                    color: "text-[#006B5F]",
+                    border: "border-[#006B5F]",
+                    bg: "bg-[#006B5F]/10",
+                  },
+                  {
+                    key: "carbs",
+                    label: "Carbohydrates",
+                    val: analytics.avgCarbs,
+                    target: targetCarbsG,
+                    color: "text-amber-600",
+                    border: "border-amber-500",
+                    bg: "bg-amber-50",
+                  },
+                  {
+                    key: "fat",
+                    label: "Healthy Fats",
+                    val: analytics.avgFat,
+                    target: targetFatG,
+                    color: "text-rose-500",
+                    border: "border-rose-400",
+                    bg: "bg-rose-50",
+                  },
+                ].map((item) => {
+                  const isActive = activeMacro === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setActiveMacro(item.key as any)}
+                      className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
+                        isActive
+                          ? `${item.border} ${item.bg} shadow-sm`
+                          : "border-gray-100 bg-gray-50/50 hover:bg-gray-100"
+                      }`}
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                        {item.label}
+                      </span>
+                      <p className={`font-headline font-black text-lg ${item.color} mt-0.5`}>
+                        {item.val !== null ? `${item.val}g` : "—"}
+                      </p>
+                      <span className="text-[10px] text-gray-400">
+                        Target: {item.target}g
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-            {/* Graph Section */}
-            <div className="relative h-[160px] w-full mb-10">
-              {/* Y-axis grid and labels */}
-              <div className="absolute inset-0 flex flex-col justify-between pb-8">
-                <div className="relative w-full border-t border-[#A1ECD9]/40">
-                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">{maxW.toFixed(0)}KG</span>
+              {/* Macro Calorie Energy Distribution Bar */}
+              <div className="bg-gray-50 rounded-2xl p-4 space-y-2 border border-gray-100">
+                <div className="flex justify-between items-center text-xs font-bold text-gray-600">
+                  <span>Actual Calorie Ratio</span>
+                  <span>
+                    {analytics.proteinRatio}% P • {analytics.carbsRatio}% C • {analytics.fatRatio}% F
+                  </span>
                 </div>
-                <div className="relative w-full border-t border-[#A1ECD9]/40">
-                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">{((maxW + minW) / 2).toFixed(0)}KG</span>
+                <div className="h-3 w-full bg-gray-200 rounded-full flex overflow-hidden">
+                  <div
+                    className="bg-[#006B5F] h-full transition-all duration-500"
+                    style={{ width: `${analytics.proteinRatio}%` }}
+                    title={`Protein: ${analytics.proteinRatio}%`}
+                  />
+                  <div
+                    className="bg-amber-400 h-full transition-all duration-500"
+                    style={{ width: `${analytics.carbsRatio}%` }}
+                    title={`Carbs: ${analytics.carbsRatio}%`}
+                  />
+                  <div
+                    className="bg-rose-400 h-full transition-all duration-500"
+                    style={{ width: `${analytics.fatRatio}%` }}
+                    title={`Fat: ${analytics.fatRatio}%`}
+                  />
                 </div>
-                <div className="relative w-full border-t border-[#A1ECD9]/40">
-                  <span className="absolute -top-[16px] left-0 text-[10px] font-bold opacity-60">{minW.toFixed(0)}KG</span>
+                <div className="flex justify-between items-center text-[10px] text-gray-400 pt-1">
+                  <span>Recommended Profile Target: 25% P • 45% C • 30% F</span>
                 </div>
               </div>
 
-              {/* Chart SVG */}
-              <div className="absolute inset-0 pb-8 pl-[12%]">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 300 100" preserveAspectRatio="none">
-                  {/* Target Path (dashed white) */}
-                  <line x1="0" y1={targetY} x2="300" y2={targetY} stroke="white" strokeWidth="2.5" strokeDasharray="6,4" opacity="0.9" />
-                  
-                  {/* Actual Path (solid curve) */}
-                  {pathD && (
-                    <path d={pathD} fill="none" stroke="#085C50" strokeWidth="4.5" strokeLinecap="round" />
-                  )}
-                  
-                  {/* Glowing end dot */}
-                  {graphPoints.map((pt, idx) => (
-                    <g key={idx}>
-                      <circle cx={pt.x} cy={pt.y} r="3.5" fill="#085C50" />
-                      {idx === graphPoints.length - 1 && (
-                        <circle cx={pt.x} cy={pt.y} r="8" fill="#085C50" opacity="0.3" />
-                      )}
-                    </g>
-                  ))}
-                </svg>
+              {/* Active Macro Timeline Chart */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-bold text-gray-500">
+                  <span className="capitalize">{activeMacro} Daily Intake (g)</span>
+                  <span>
+                    Goal:{" "}
+                    {activeMacro === "protein"
+                      ? targetProteinG
+                      : activeMacro === "carbs"
+                      ? targetCarbsG
+                      : targetFatG}
+                    g
+                  </span>
+                </div>
+
+                <div
+                  className={`flex items-end justify-between h-28 px-1 pt-2 ${
+                    range === 30 ? "gap-0.5" : "gap-2"
+                  }`}
+                >
+                  {adherenceDays.map((day) => {
+                    const val = day.logged ? day[activeMacro] : 0;
+                    const maxVal = Math.max(
+                      activeMacro === "protein"
+                        ? targetProteinG * 1.3
+                        : activeMacro === "carbs"
+                        ? targetCarbsG * 1.3
+                        : targetFatG * 1.3,
+                      50
+                    );
+                    const hPct = day.logged
+                      ? Math.min(100, Math.max(12, Math.round((val / maxVal) * 100)))
+                      : 8;
+
+                    return (
+                      <div
+                        key={day.date}
+                        className="flex-1 flex flex-col items-center h-full justify-end"
+                        title={`${day.date}: ${val}g`}
+                      >
+                        <div
+                          className={`w-full rounded-t-sm transition-all duration-300 ${
+                            !day.logged
+                              ? "bg-gray-200 border border-dashed border-gray-300 opacity-50"
+                              : activeMacro === "protein"
+                              ? "bg-[#006B5F]"
+                              : activeMacro === "carbs"
+                              ? "bg-amber-400"
+                              : "bg-rose-400"
+                          }`}
+                          style={{ height: `${hPct}%` }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+
+            {/* Weight Tracking & Goal Journey */}
+            <section className="bg-gradient-to-br from-[#004B40] via-[#006B5F] to-[#0D9488] rounded-3xl p-6 text-white shadow-lg space-y-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#2DD4BF]">
+                    Weight Journey
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <h3 className="font-headline font-black text-3xl">
+                      {weightDiff}
+                    </h3>
+                    <span className="text-sm font-bold text-white/80 uppercase">
+                      kg {weightDiffAction}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/70 mt-1">
+                    Current: {weightKg.toFixed(1)} kg • Goal: {targetWeightKg.toFixed(1)} kg
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWeightInput(weightKg.toString());
+                    setIsModalOpen(true);
+                  }}
+                  className="bg-white hover:bg-gray-100 text-[#006B5F] px-4 py-2 rounded-xl text-xs font-black shadow transition-all active:scale-95 flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Log Weight</span>
+                </button>
               </div>
 
-              {/* X-axis labels */}
-              <div className="absolute bottom-0 w-full pl-[12%] flex justify-between text-[9px] font-bold opacity-60 uppercase tracking-widest px-2">
-                {weightHistory.length <= 1 ? (
-                  <>
-                    <span>Start</span>
-                    <span>Now</span>
-                  </>
-                ) : weightHistory.length === 2 ? (
-                  <>
-                    <span>{new Date(weightHistory[0].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
-                    <span>{new Date(weightHistory[1].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
-                  </>
-                ) : (
-                  <>
-                    <span>{new Date(weightHistory[0].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
-                    <span>{new Date(weightHistory[Math.floor(weightHistory.length / 2)].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
-                    <span>{new Date(weightHistory[weightHistory.length - 1].recordedAt).toLocaleDateString([], {month: 'numeric', day: 'numeric'})}</span>
-                  </>
-                )}
-              </div>
-            </div>
+              {/* Weight Chart or Honest Empty State */}
+              <div className="bg-black/15 rounded-2xl p-4 backdrop-blur-sm">
+                {isWeightLoading ? (
+                  <div className="h-32 flex items-center justify-center text-xs text-white/60">
+                    Loading weight history...
+                  </div>
+                ) : weightSvg ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-xs font-bold text-white/80">
+                      <span>Historical Weight Trend</span>
+                      <span className="text-[#2DD4BF]">
+                        {parseFloat(weightSvg.netChange) <= 0
+                          ? `${weightSvg.netChange} kg since ${weightSvg.firstDate}`
+                          : `+${weightSvg.netChange} kg since ${weightSvg.firstDate}`}
+                      </span>
+                    </div>
 
-            {/* Metric Cards */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <button 
-                onClick={() => setIsModalOpen(true)}
-                className="bg-[#85EADA]/40 hover:bg-[#85EADA]/60 active:scale-[0.97] transition-all rounded-[20px] p-5 backdrop-blur-md relative overflow-hidden flex flex-col items-start cursor-pointer group text-left border-none outline-none"
-              >
-                <div className="absolute inset-0 bg-white opacity-20"></div>
-                <div className="relative z-10 w-full flex justify-between items-start">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5 opacity-80">Current</p>
-                    <div className="flex items-baseline gap-1">
-                      <p className="font-headline font-extrabold text-[28px] leading-none text-[#085C50]">{weightKg.toFixed(1)}</p>
-                      <span className="text-xs font-bold opacity-90 text-[#085C50]">kg</span>
+                    <div className="relative h-28 w-full">
+                      <svg
+                        className="w-full h-full overflow-visible"
+                        viewBox="0 0 320 120"
+                        preserveAspectRatio="none"
+                      >
+                        {/* Target Line (Dashed White) */}
+                        <line
+                          x1="0"
+                          y1={weightSvg.targetY}
+                          x2="320"
+                          y2={weightSvg.targetY}
+                          stroke="white"
+                          strokeWidth="1.5"
+                          strokeDasharray="4,4"
+                          opacity="0.6"
+                        />
+
+                        {/* Actual Weight Curve */}
+                        <path
+                          d={weightSvg.pathData}
+                          fill="none"
+                          stroke="#2DD4BF"
+                          strokeWidth="3.5"
+                          strokeLinecap="round"
+                        />
+
+                        {/* Weight Points */}
+                        {weightSvg.points.map((pt, idx) => (
+                          <circle
+                            key={idx}
+                            cx={pt.x}
+                            cy={pt.y}
+                            r={idx === weightSvg.points.length - 1 ? 4.5 : 3}
+                            fill="#FFFFFF"
+                            stroke="#006B5F"
+                            strokeWidth="2"
+                          />
+                        ))}
+                      </svg>
+                    </div>
+
+                    <div className="flex justify-between text-[10px] font-bold text-white/60 pt-1">
+                      <span>{weightSvg.firstDate}</span>
+                      <span className="text-white/40">Target: {targetWeightKg} kg</span>
+                      <span>{weightSvg.lastDate}</span>
                     </div>
                   </div>
-                  <span className="material-symbols-outlined text-[18px] text-[#085C50] opacity-60 group-hover:opacity-100 transition-opacity">add_circle</span>
-                </div>
-              </button>
-              <div className="bg-[#85EADA]/40 rounded-[20px] p-5 backdrop-blur-md relative overflow-hidden flex flex-col items-end text-right">
-                <div className="absolute inset-0 bg-white opacity-20"></div>
-                <div className="relative z-10">
-                  <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest mb-1.5">Goal</p>
-                  <div className="flex items-baseline gap-1">
-                    <p className="font-headline font-extrabold text-[28px] leading-none">{targetWeightKg.toFixed(1)}</p>
-                    <span className="text-xs font-bold opacity-90">kg</span>
+                ) : weightHistory.length === 1 ? (
+                  <div className="py-4 text-center space-y-2">
+                    <p className="text-sm font-bold text-white">
+                      1 weight entry recorded ({weightHistory[0].weightKg} kg)
+                    </p>
+                    <p className="text-xs text-white/70 max-w-sm mx-auto">
+                      Log your weight on multiple days to view your progress trend line.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="py-4 text-center space-y-2">
+                    <p className="text-sm font-bold text-white">
+                      No weight entries logged yet
+                    </p>
+                    <p className="text-xs text-white/70 max-w-sm mx-auto">
+                      Regular weigh-ins help you monitor your journey toward your South Asian health goal.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* South Asian BMI Status Indicator */}
+              <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm space-y-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">
+                      South Asian BMI Standard
+                    </span>
+                    <h4 className="font-headline font-black text-lg text-white">
+                      BMI {bmiInfo.bmi} • {bmiInfo.label}
+                    </h4>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-[#2DD4BF] bg-white/10 px-2.5 py-1 rounded-full uppercase">
+                      Height: {heightCm} cm
+                    </span>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Legend Component */}
-            <div className="flex justify-center items-center gap-6 mb-8 mt-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-[3px] bg-[#085C50] rounded-full"></div>
-                <span className="text-[11px] font-bold opacity-80 title-case font-body">Actual</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-[3px] bg-white opacity-90 rounded-full border border-dashed border-white"></div>
-                <span className="text-[11px] font-bold opacity-80 title-case font-body">Target Path</span>
-              </div>
-            </div>
+                {/* BMI Gauge Bar */}
+                <div className="relative pt-1 pb-3">
+                  <div className="h-3 w-full rounded-full flex overflow-hidden shadow-inner">
+                    <div className="h-full bg-blue-400 w-[25%]" title="Underweight < 18.5" />
+                    <div className="h-full bg-emerald-400 w-[30%]" title="Normal 18.5 - 23.0" />
+                    <div className="h-full bg-amber-400 w-[25%]" title="Overweight 23.0 - 27.5" />
+                    <div className="h-full bg-rose-400 w-[20%]" title="Obese > 27.5" />
+                  </div>
 
-            {/* Footer Text */}
-            <p className="text-center text-[12px] font-bold opacity-80 italic font-body">
-              Just {diff} kg away from your Sri Lankan health target
-            </p>
-          </div>
-        </section>
-
-        {/* Calorie Adherence Section */}
-        <section className="bg-surface-container-lowest p-6 rounded-xl space-y-6 flex flex-col pt-6">
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center">
-              <h3 className="font-headline font-bold text-lg text-on-surface">
-                Calorie Adherence
-              </h3>
-              <span className="material-symbols-outlined text-primary">
-                analytics
-              </span>
-            </div>
-            {/* Time Period Tabs */}
-            <div className="flex bg-surface-container-low p-1 rounded-lg">
-              {(["today", "yesterday", "7days", "month"] as const).map((period) => (
-                <button
-                  key={period}
-                  onClick={() => setCaloriePeriod(period)}
-                  className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
-                    caloriePeriod === period
-                      ? "bg-surface-container-lowest text-primary shadow-sm rounded-md"
-                      : "text-outline hover:text-on-surface"
-                  }`}
-                >
-                  {period === "7days" ? "7 Days" : period}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1">
-              <p className="text-xs text-outline font-medium">
-                {caloriePeriodData[caloriePeriod].label}
-              </p>
-              <div className="flex items-baseline gap-1">
-                <h4 className="font-headline font-extrabold text-4xl text-on-surface">
-                  {caloriePeriodData[caloriePeriod].kcal.toLocaleString()}
-                </h4>
-                <span className="text-sm font-bold text-outline">kcal</span>
-              </div>
-            </div>
-            <div className="bg-primary/10 px-3 py-1 rounded-full flex flex-col justify-center align-center h-auto items-center">
-              <p className="text-[10px] font-bold text-primary uppercase tracking-tighter w-full block m-0 h-auto">
-                Target: {targetCalories}
-              </p>
-            </div>
-          </div>
-          {/* Calorie Bar Chart */}
-          <div className="space-y-4">
-            <div className="flex items-end justify-between h-24 gap-2 px-1">
-              {calorieChartData[caloriePeriod].map((bar, idx) => (
-                <div key={idx} className="flex flex-col items-center flex-1 gap-2 animate-fade-in">
+                  {/* Marker Pin */}
                   <div
-                    className={`w-full rounded-t-sm transition-all duration-500 ${bar.color}`}
-                    style={{ height: bar.height }}
-                    title={`${bar.kcal.toLocaleString()} kcal`}
-                  ></div>
-                  <span className="text-[9px] font-bold text-outline">{bar.label}</span>
+                    className="absolute top-0 transform -translate-x-1/2 flex flex-col items-center transition-all duration-500"
+                    style={{ left: `${bmiPos}%` }}
+                  >
+                    <div className="w-2.5 h-4 bg-white rounded-full shadow-md" />
+                  </div>
+
+                  <div className="flex justify-between text-[9px] font-bold text-white/60 mt-1 px-1">
+                    <span>18.5</span>
+                    <span className="text-[#2DD4BF]">23.0 (SA Limit)</span>
+                    <span>27.5</span>
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-outline">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-primary"></div>
-                <span>Under Target</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-error/40"></div>
-                <span>Over Target</span>
-              </div>
-            </div>
-          </div>
-        </section>
 
-        {/* Macro Filters & Trends Section */}
-        <section className="bg-surface-container-lowest p-6 rounded-xl space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="font-headline font-bold text-lg text-on-surface">
-              Macro Trends
-            </h3>
-            <span className="text-[10px] font-bold text-outline uppercase tracking-widest">
-              Last 7 Days
-            </span>
-          </div>
-          {/* Macro Tabs/Filters */}
-          <div className="grid grid-cols-3 gap-2">
-            {(["carbs", "protein", "fat"] as const).map((macro) => {
-              const isActive = activeMacro === macro;
-              const label = macro.charAt(0).toUpperCase() + macro.slice(1);
-              const val = macro === "carbs" ? consumedCarbs : macro === "protein" ? consumedProtein : consumedFat;
-              return (
-                <button
-                  key={macro}
-                  onClick={() => setActiveMacro(macro)}
-                  className={`p-3 rounded-xl text-center border transition-all duration-200 active:scale-[0.98] cursor-pointer ${
-                    isActive
-                      ? "bg-primary/10 border-primary/20 text-primary font-bold"
-                      : "bg-surface-container-low border-transparent text-outline hover:text-on-surface"
-                  }`}
-                >
-                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${isActive ? "text-primary" : "text-outline"}`}>
-                    {label}
-                  </p>
-                  <p className="font-headline font-bold text-sm">{val}g</p>
-                </button>
-              );
-            })}
-          </div>
-          {/* Trend Visualization for selected Macro */}
-          <div className="bg-surface-container-low/50 p-4 rounded-xl">
-            <div className="flex justify-between items-end h-16 gap-1 mb-2">
-              {macroChartData[activeMacro].bars.map((bar, idx) => (
-                <div
-                  key={idx}
-                  className={`w-full rounded-t-sm transition-all duration-500 ${
-                    idx === 5 ? "bg-primary" : "bg-primary/25"
-                  }`}
-                  style={{ height: bar.height }}
-                  title={`${bar.label}: ${bar.height}`}
-                ></div>
-              ))}
-            </div>
-            <div className="flex justify-between text-[8px] font-bold text-outline uppercase px-1">
-              <span>Mon</span>
-              <span>Sun</span>
-            </div>
-            <p className="mt-4 text-[11px] text-center text-on-surface-variant font-medium">
-              {macroChartData[activeMacro].description}
-            </p>
-          </div>
-        </section>
-
-        {/* South Asian BMI Tracker */}
-        <section className="bg-surface-container-lowest p-6 rounded-xl space-y-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 className="font-headline font-bold text-lg text-on-surface">
-                South Asian BMI Tracker
-              </h3>
-              <p className="text-xs text-outline font-medium">
-                Based on local health standards
-              </p>
-            </div>
-            <div className="flex flex-col items-end">
-              <p className="font-headline font-black text-3xl text-on-surface">
-                {bmi}
-              </p>
-              <div className="flex items-center gap-1 bg-tertiary-container/20 px-2 py-0.5 rounded text-[10px] font-bold text-tertiary uppercase tracking-tighter">
-                <span className="material-symbols-outlined text-[12px]">
-                  monitor_weight
-                </span>
-                Current BMI
-              </div>
-            </div>
-          </div>
-          <div className="relative">
-            {/* Labels */}
-            <div className="flex justify-between text-[10px] text-outline font-bold uppercase tracking-tighter mb-2 px-1">
-              <span>Under</span>
-              <span className="text-primary">Normal</span>
-              <span className="text-tertiary">Over</span>
-              <span className="text-error">Obese</span>
-            </div>
-            {/* Gauge Bar */}
-            <div className="h-5 w-full rounded-full flex overflow-hidden shadow-inner">
-              <div className="h-full bg-secondary-container w-[35%]" title="Underweight < 18.5"></div>
-              <div className="h-full bg-primary-container w-[25%] border-x-2 border-surface-container-lowest" title="Normal 18.5 - 23.0"></div>
-              <div className="h-full bg-tertiary-container w-[20%]" title="Overweight 23.0 - 27.5"></div>
-              <div className="h-full bg-error-container w-[20%]" title="Obese > 27.5"></div>
-            </div>
-            {/* Marker */}
-            <div 
-              className="absolute top-7 transform -translate-x-1/2 flex flex-col items-center transition-all duration-700 ease-out"
-              style={{ left: `${bmiPos}%` }}
-            >
-              <div className="w-1.5 h-4 bg-on-surface rounded-full shadow-sm"></div>
-            </div>
-            {/* Range markers */}
-            <div className="flex justify-between text-[9px] text-outline mt-1 px-1 font-mono">
-              <span>18.5</span>
-              <span className="text-primary font-bold">23.0</span>
-              <span>27.5</span>
-            </div>
-          </div>
-          {/* BMI Historical Sparkline */}
-          <div className="pt-4 border-t border-outline-variant/20">
-            <p className="text-[10px] font-bold text-outline uppercase tracking-widest mb-3">
-              6-Month Trend
-            </p>
-            <div className="flex items-end justify-between h-12 gap-1.5 px-1">
-              <div className="w-full bg-outline-variant/20 rounded-t-sm h-[95%]"></div>
-              <div className="w-full bg-outline-variant/20 rounded-t-sm h-[90%]"></div>
-              <div className="w-full bg-outline-variant/20 rounded-t-sm h-[85%]"></div>
-              <div className="w-full bg-outline-variant/20 rounded-t-sm h-[80%]"></div>
-              <div className="w-full bg-primary/60 rounded-t-sm h-[70%]"></div>
-              <div className="w-full bg-primary rounded-t-sm h-[65%]"></div>
-            </div>
-          </div>
-          <div className="bg-tertiary-container/10 p-4 rounded-lg flex items-start gap-3">
-            <span className="material-symbols-outlined text-tertiary mt-0.5">
-              info
-            </span>
-            <p className="text-xs text-on-surface-variant leading-relaxed">
-              Your current BMI is <span className="font-bold">{bmi}</span>. For South
-              Asians, health risks increase above{" "}
-              <span className="font-bold text-tertiary">23.0</span>. Aiming for{" "}
-              <span className="text-primary font-bold">22.5</span> is
-              recommended.
-            </p>
-          </div>
-        </section>
-
-        {/* Essential Micronutrients */}
-        <section className="bg-surface-container-lowest p-6 rounded-xl space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="font-headline font-bold text-lg text-on-surface">
-                Essential Micronutrients
-              </h3>
-              <p className="text-xs text-outline font-medium">
-                Daily Target Adherence
-              </p>
-            </div>
-            <span className="material-symbols-outlined text-primary">
-              nutrition
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Fiber */}
-            <div className="bg-surface-container-low p-4 rounded-xl flex flex-col items-center text-center space-y-3 border border-outline-variant/10">
-              <span className="text-[10px] font-bold text-outline uppercase tracking-widest">
-                Fiber
-              </span>
-              <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle className="text-surface-variant/30" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeWidth={4}></circle>
-                  <circle className="text-primary" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeDasharray="175.9" strokeDashoffset="44" strokeLinecap="round" strokeWidth={4}></circle>
-                </svg>
-                <span className="absolute font-headline font-bold text-sm">75%</span>
-              </div>
-              <p className="text-[10px] text-primary font-bold">Near Goal</p>
-            </div>
-            {/* Sodium */}
-            <div className="bg-surface-container-low p-4 rounded-xl flex flex-col items-center text-center space-y-3 border border-outline-variant/10">
-              <span className="text-[10px] font-bold text-outline uppercase tracking-widest">
-                Sodium
-              </span>
-              <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle className="text-surface-variant/30" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeWidth={4}></circle>
-                  <circle className="text-error" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeDasharray="175.9" strokeDashoffset="130" strokeLinecap="round" strokeWidth={4}></circle>
-                </svg>
-                <span className="absolute font-headline font-bold text-sm text-error">High</span>
-              </div>
-              <p className="text-[10px] text-error font-bold uppercase">Critical</p>
-            </div>
-            {/* Potassium */}
-            <div className="bg-surface-container-low p-4 rounded-xl flex flex-col items-center text-center space-y-3 border border-outline-variant/10">
-              <span className="text-[10px] font-bold text-outline uppercase tracking-widest">
-                Potassium
-              </span>
-              <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle className="text-surface-variant/30" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeWidth={4}></circle>
-                  <circle className="text-tertiary" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeDasharray="175.9" strokeDashoffset="88" strokeLinecap="round" strokeWidth={4}></circle>
-                </svg>
-                <span className="absolute font-headline font-bold text-sm">50%</span>
-              </div>
-              <p className="text-[10px] text-tertiary font-bold">Low</p>
-            </div>
-            {/* Vitamin C */}
-            <div className="bg-surface-container-low p-4 rounded-xl flex flex-col items-center text-center space-y-3 border border-outline-variant/10">
-              <span className="text-[10px] font-bold text-outline uppercase tracking-widest">
-                Vitamin C
-              </span>
-              <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle className="text-surface-variant/30" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeWidth={4}></circle>
-                  <circle className="text-primary-container" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" strokeDasharray="175.9" strokeDashoffset="18" strokeLinecap="round" strokeWidth={4}></circle>
-                </svg>
-                <span className="absolute font-headline font-bold text-sm">90%</span>
-              </div>
-              <p className="text-[10px] text-primary-container font-bold">Optimal</p>
-            </div>
-          </div>
-          <p className="text-[11px] text-on-surface-variant text-center px-4">
-            Pro tip: Sodium intake is common in pickles and dried fish. Increase
-            Fiber via whole grains like red rice.
-          </p>
-        </section>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Hydration Tracker */}
-          <section className="bg-surface-container-lowest p-6 rounded-xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-headline font-bold text-lg">Hydration</h3>
-              <div className="flex items-center gap-1 text-primary">
-                <span
-                  className="material-symbols-outlined text-sm"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  water_drop
-                </span>
-                <span className="font-bold text-xs uppercase tracking-widest">
-                  Liters
-                </span>
-              </div>
-            </div>
-            <div className="flex items-end justify-between h-24 gap-2">
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/20 rounded-t-md h-[80%]"></div>
-                <span className="text-[9px] font-bold text-outline">M</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/20 rounded-t-md h-[60%]"></div>
-                <span className="text-[9px] font-bold text-outline">T</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary rounded-t-md h-[95%]"></div>
-                <span className="text-[9px] font-bold text-outline">W</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/20 rounded-t-md h-[40%]"></div>
-                <span className="text-[9px] font-bold text-outline">T</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/20 rounded-t-md h-[70%]"></div>
-                <span className="text-[9px] font-bold text-outline">F</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/20 rounded-t-md h-[30%]"></div>
-                <span className="text-[9px] font-bold text-outline">S</span>
-              </div>
-              <div className="flex flex-col items-center flex-1 gap-2">
-                <div className="w-full bg-primary/10 rounded-t-md h-[10%]"></div>
-                <span className="text-[9px] font-bold text-outline">S</span>
-              </div>
-            </div>
-            <p className="mt-4 text-xs font-medium text-on-surface-variant text-center">
-              Avg. 2.4L per day
-            </p>
-          </section>
-
-          {/* Adherence & Streaks */}
-          <section className="bg-surface-container-lowest p-6 rounded-xl">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h3 className="font-headline font-bold text-lg">Goal Adherence</h3>
-                <p className="text-xs text-outline font-medium">Last 7 Days</p>
-              </div>
-              <div className="bg-tertiary-container px-3 py-1.5 rounded-full flex items-center gap-2 scale-95 active:scale-90 transition-transform cursor-pointer">
-                <span
-                  className="material-symbols-outlined text-on-tertiary-container text-sm"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  local_fire_department
-                </span>
-                <span className="text-[10px] font-bold text-on-tertiary-container uppercase tracking-widest">
-                  14 Day Streak
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-1 mb-8">
-              <span className="font-headline font-extrabold text-4xl text-primary">
-                5
-              </span>
-              <span className="font-headline font-bold text-lg text-outline">
-                / 7 Days Under Target
-              </span>
-            </div>
-            <div className="flex justify-between gap-1">
-              <div className="h-1.5 flex-1 bg-primary rounded-full"></div>
-              <div className="h-1.5 flex-1 bg-primary rounded-full"></div>
-              <div className="h-1.5 flex-1 bg-outline-variant/30 rounded-full"></div>
-              <div className="h-1.5 flex-1 bg-primary rounded-full"></div>
-              <div className="h-1.5 flex-1 bg-primary rounded-full"></div>
-              <div className="h-1.5 flex-1 bg-outline-variant/30 rounded-full"></div>
-              <div className="h-1.5 flex-1 bg-primary rounded-full"></div>
-            </div>
-          </section>
-        </div>
-
-        {/* Local Food Habits */}
-        <section className="bg-surface-container-low p-6 rounded-xl">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-headline font-bold text-lg">Staple Frequency</h3>
-            <span className="text-xs font-bold text-primary uppercase tracking-widest bg-primary-container/20 px-2 py-1 rounded">
-              This Month
-            </span>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center gap-4 bg-surface-container-lowest p-3 rounded-lg group hover:bg-primary-container transition-colors">
-              <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center">
-                <span className="material-symbols-outlined text-tertiary">
-                  eco
-                </span>
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-sm">Red Rice</p>
-                <p className="text-[10px] text-outline group-hover:text-on-primary-container">
-                  Sri Lankan Medium Grain
+                <p className="text-[11px] text-white/80 leading-relaxed">
+                  South Asian health guidelines recommend maintaining BMI below{" "}
+                  <span className="font-bold text-white">23.0</span> to minimize metabolic and cardiovascular risk.
                 </p>
               </div>
-              <div className="text-right">
-                <p className="font-headline font-bold text-lg">24</p>
-                <p className="text-[10px] uppercase font-bold tracking-tighter opacity-60">
-                  Logs
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 bg-surface-container-lowest p-3 rounded-lg group hover:bg-primary-container transition-colors">
-              <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center">
-                <span className="material-symbols-outlined text-primary">
-                  potted_plant
-                </span>
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-sm">Dhal Curry</p>
-                <p className="text-[10px] text-outline group-hover:text-on-primary-container">
-                  Protein Rich Pulses
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-headline font-bold text-lg">18</p>
-                <p className="text-[10px] uppercase font-bold tracking-tighter opacity-60">
-                  Logs
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 bg-surface-container-lowest p-3 rounded-lg group hover:bg-primary-container transition-colors">
-              <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center">
-                <span className="material-symbols-outlined text-tertiary-container">
-                  nutrition
-                </span>
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-sm">Pol Sambol</p>
-                <p className="text-[10px] text-outline group-hover:text-on-primary-container">
-                  Fresh Coconut Relish
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-headline font-bold text-lg">12</p>
-                <p className="text-[10px] uppercase font-bold tracking-tighter opacity-60">
-                  Logs
-                </p>
-              </div>
-            </div>
-          </div>
-          <button className="w-full mt-4 py-3 text-xs font-bold text-primary uppercase tracking-widest border border-primary/20 rounded-lg hover:bg-primary/5 transition-colors">
-            View Full Breakdown
-          </button>
-        </section>
+            </section>
+          </>
+        )}
       </main>
 
-      <AppBottomNav activeTab="progress" />
-
-      {/* Log Weight Slide-Up Modal */}
+      {/* Log Weight Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm transition-opacity duration-300">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm transition-opacity">
           <div className="absolute inset-0" onClick={() => setIsModalOpen(false)} />
-          
-          <div className="relative w-full max-w-[430px] bg-white rounded-t-[32px] p-6 shadow-2xl z-10 transition-transform transform translate-y-0 duration-350 flex flex-col gap-5 border-t border-gray-100 pb-10">
-            <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-1" />
-            
+
+          <div className="relative w-full max-w-[430px] bg-white rounded-t-[32px] p-6 shadow-2xl z-10 border-t border-gray-100 pb-10 flex flex-col gap-4">
+            <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto" />
+
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-black text-[#1A1C1C] tracking-tight">Log Today's Weight</h3>
-                <p className="text-xs text-[#64748B] mt-0.5">Track your South Asian BMI & target journey</p>
+                <h3 className="text-lg font-black text-[#1A1C1C]">Log Weight</h3>
+                <p className="text-xs text-gray-500">Record today's body weight</p>
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[#1A1C1C] hover:bg-gray-200 transition-colors"
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -884,21 +995,18 @@ export default function ProgressPage() {
               </button>
             </div>
 
-            {modalError && (
-              <div className="bg-red-50 text-red-600 border border-red-100 text-xs font-semibold rounded-xl p-3 leading-normal flex items-start gap-2">
-                <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <span>{modalError}</span>
+            {weightError && (
+              <div className="bg-red-50 text-red-600 border border-red-100 text-xs font-semibold rounded-xl p-3">
+                {weightError}
               </div>
             )}
 
             <form onSubmit={handleLogWeight} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
+              <div>
                 <label className="text-[11px] font-bold uppercase tracking-wider text-gray-500 pl-1">
                   Weight (kg)
                 </label>
-                <div className="relative flex items-center">
+                <div className="relative flex items-center mt-1">
                   <input
                     type="number"
                     step="0.1"
@@ -906,10 +1014,10 @@ export default function ProgressPage() {
                     max="300"
                     required
                     autoFocus
-                    placeholder="e.g. 72.5"
+                    placeholder="e.g. 68.5"
                     value={weightInput}
                     onChange={(e) => setWeightInput(e.target.value)}
-                    className="w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl focus:border-[#2DD4BF] focus:bg-white focus:outline-none text-sm transition-colors font-extrabold text-[#1A1C1C]"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:border-[#006B5F] focus:bg-white focus:outline-none text-base font-extrabold text-[#1A1C1C]"
                   />
                   <span className="absolute right-4 font-bold text-xs text-gray-400">kg</span>
                 </div>
@@ -919,22 +1027,33 @@ export default function ProgressPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-3.5 bg-gray-100 hover:bg-gray-200 rounded-2xl text-xs font-bold text-gray-600 transition-colors"
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-600 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="flex-1 py-3.5 bg-[#006B5F] hover:bg-[#00574D] disabled:bg-gray-300 rounded-2xl text-xs font-bold text-white transition-colors shadow-lg shadow-[#006B5F]/20"
+                  disabled={submittingWeight}
+                  className="flex-1 py-3 bg-[#006B5F] hover:bg-[#00574D] disabled:bg-gray-300 rounded-xl text-xs font-bold text-white transition-colors shadow-md shadow-[#006B5F]/20"
                 >
-                  {submitting ? "Saving..." : "Save Weight"}
+                  {submittingWeight ? "Saving..." : "Save Weight"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Persistent Bottom Nav */}
+      <AppBottomNav activeTab="progress" />
     </div>
+  );
+}
+
+export default function ProgressPage() {
+  return (
+    <AuthGuard>
+      <ProgressContent />
+    </AuthGuard>
   );
 }

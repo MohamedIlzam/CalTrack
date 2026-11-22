@@ -1,17 +1,30 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppBottomNav } from "@/components/ui/AppBottomNav";
 import { useAppStore } from "@/store/useAppStore";
 import { fetchUserProfile, updateUserProfile, type UserProfile } from "@/lib/api";
+import { AuthGuard } from "@/components/auth/AuthGuard";
+import { calculateBmi, calculateNutritionTargets } from "@/lib/nutrition";
+import type { Goal, ActivityLevel } from "@/store/useAppStore";
 
-export default function ProfilePage() {
+function ProfileContent() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const logout = useAppStore((s) => s.logout);
   const storeName = useAppStore((s) => s.name);
   const storeEmail = useAppStore((s) => s.email);
   const setOnboarding = useAppStore((s) => s.setOnboarding);
+
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+    }
+    logout();
+    router.replace("/");
+  };
 
   // Fetch profile from live NestJS backend
   const { data: profile } = useQuery<UserProfile | null>({
@@ -51,19 +64,36 @@ export default function ProfilePage() {
     }
   }, [profile]);
 
-  // Calculated South Asian BMI
+  // Calculated BMI without regional label suffix
   const bmiInfo = useMemo(() => {
-    const w = parseFloat(weightKg);
-    const h = parseFloat(heightCm) / 100;
-    if (isNaN(w) || isNaN(h) || h <= 0) return { bmi: "--", label: "Unknown", color: "text-gray-400" };
-    const bmiVal = (w / (h * h)).toFixed(1);
-    const numericBmi = parseFloat(bmiVal);
-
-    if (numericBmi < 18.5) return { bmi: bmiVal, label: "Underweight", color: "text-blue-500" };
-    if (numericBmi < 23.0) return { bmi: bmiVal, label: "Normal (South Asian)", color: "text-emerald-500" };
-    if (numericBmi < 27.5) return { bmi: bmiVal, label: "Overweight (South Asian)", color: "text-amber-500" };
-    return { bmi: bmiVal, label: "Obese (South Asian)", color: "text-rose-500" };
+    return calculateBmi(parseFloat(weightKg), parseFloat(heightCm));
   }, [weightKg, heightCm]);
+
+  // Synchronize calorie and macro targets automatically when physical metrics change
+  useEffect(() => {
+    const w = parseFloat(weightKg);
+    const h = parseFloat(heightCm);
+    if (!isNaN(w) && w >= 20 && w <= 300 && !isNaN(h) && h >= 50 && h <= 260) {
+      const targets = calculateNutritionTargets({
+        weightKg: w,
+        heightCm: h,
+        activityLevel,
+        goal,
+      });
+      setTargetCalories(targets.targetCalories.toString());
+      setTargetProteinG(targets.targetProteinG.toString());
+      setTargetCarbsG(targets.targetCarbsG.toString());
+      setTargetFatG(targets.targetFatG.toString());
+    }
+  }, [weightKg, heightCm, activityLevel, goal]);
+
+  // Handle target weight with 2-digit whole number validation
+  const handleTargetWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (/^\d{0,2}$/.test(val)) {
+      setTargetWeightKg(val);
+    }
+  };
 
   // Calculated Macro percentages
   const macroBreakdown = useMemo(() => {
@@ -84,12 +114,14 @@ export default function ProfilePage() {
   const updateMutation = useMutation({
     mutationFn: (payload: Partial<UserProfile>) => updateUserProfile(payload),
     onSuccess: (updated) => {
-      // Sync local Zustand state
+      // Sync local Zustand state so Home and other views reflect saved targets
       setOnboarding({
         name: updated.name || undefined,
         weightKg: updated.weightKg || undefined,
         targetWeightKg: updated.targetWeightKg || undefined,
         heightCm: updated.heightCm || undefined,
+        goal: updated.goal ? (updated.goal.toLowerCase() as Goal) : undefined,
+        activityLevel: updated.activityLevel ? (updated.activityLevel.toLowerCase() as ActivityLevel) : undefined,
         targetCalories: updated.targetCalories || undefined,
         targetProteinG: updated.targetProteinG || undefined,
         targetCarbsG: updated.targetCarbsG || undefined,
@@ -107,17 +139,45 @@ export default function ProfilePage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const parsedWeight = parseFloat(weightKg);
+    const parsedHeight = parseFloat(heightCm);
+    const parsedTargetWeight = targetWeightKg ? parseInt(targetWeightKg, 10) : undefined;
+
+    if (isNaN(parsedWeight) || parsedWeight < 20 || parsedWeight > 300) {
+      setToastMessage("Please enter a valid weight (20 - 300 kg).");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+
+    if (isNaN(parsedHeight) || parsedHeight < 50 || parsedHeight > 260) {
+      setToastMessage("Please enter a valid height (50 - 260 cm).");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+
+    if (targetWeightKg && !/^\d{1,2}$/.test(targetWeightKg)) {
+      setToastMessage("Target weight must be a whole number up to 2 digits (e.g. 56 kg).");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+
+    const parsedCalories = parseInt(targetCalories, 10) || undefined;
+    const parsedProtein = parseInt(targetProteinG, 10) || undefined;
+    const parsedCarbs = parseInt(targetCarbsG, 10) || undefined;
+    const parsedFat = parseInt(targetFatG, 10) || undefined;
+
     updateMutation.mutate({
       name,
-      weightKg: parseFloat(weightKg) || undefined,
-      targetWeightKg: parseFloat(targetWeightKg) || undefined,
-      heightCm: parseFloat(heightCm) || undefined,
+      weightKg: parsedWeight,
+      targetWeightKg: parsedTargetWeight,
+      heightCm: parsedHeight,
       goal,
       activityLevel,
-      targetCalories: parseInt(targetCalories, 10) || undefined,
-      targetProteinG: parseInt(targetProteinG, 10) || undefined,
-      targetCarbsG: parseInt(targetCarbsG, 10) || undefined,
-      targetFatG: parseInt(targetFatG, 10) || undefined,
+      targetCalories: parsedCalories,
+      targetProteinG: parsedProtein,
+      targetCarbsG: parsedCarbs,
+      targetFatG: parsedFat,
       timezone,
     });
   };
@@ -144,7 +204,7 @@ export default function ProfilePage() {
           </div>
 
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-red-500/80 active:scale-95 transition-all text-xs font-bold text-white flex items-center gap-1.5 backdrop-blur-sm border border-white/10"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -217,10 +277,15 @@ export default function ProfilePage() {
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Target Weight</label>
                 <div className="relative">
                   <input
-                    type="number"
-                    step="0.1"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={targetWeightKg}
-                    onChange={(e) => setTargetWeightKg(e.target.value)}
+                    onChange={handleTargetWeightChange}
+                    onKeyDown={(e) => {
+                      if (["-", "+", "e", "E", "."].includes(e.key)) e.preventDefault();
+                    }}
+                    placeholder="e.g. 56"
                     className="w-full px-3 py-2.5 bg-[#F9FAFB] border border-gray-200 rounded-xl focus:border-[#006B5F] focus:bg-white focus:outline-none text-xs font-extrabold text-[#1A1C1C]"
                   />
                   <span className="absolute right-2.5 top-2.5 text-[10px] font-bold text-gray-400">kg</span>
@@ -255,13 +320,14 @@ export default function ProfilePage() {
               </span>
             </div>
 
-            {/* Target Calories Input */}
+            {/* Target Calories Display */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Target Daily Calories</label>
               <div className="relative">
                 <input
                   type="number"
                   step="50"
+                  min="500"
                   value={targetCalories}
                   onChange={(e) => setTargetCalories(e.target.value)}
                   className="w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl focus:border-[#006B5F] focus:bg-white focus:outline-none text-sm font-black text-[#1A1C1C]"
@@ -302,9 +368,10 @@ export default function ProfilePage() {
                 <div className="relative">
                   <input
                     type="number"
+                    min="0"
                     value={targetProteinG}
                     onChange={(e) => setTargetProteinG(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-xl focus:border-[#D97706] focus:outline-none text-xs font-black text-[#1A1C1C]"
+                    className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-xl text-xs font-black text-[#1A1C1C] focus:border-[#D97706] focus:outline-none"
                   />
                   <span className="absolute right-2 top-2 text-[10px] font-bold text-gray-400">g</span>
                 </div>
@@ -315,9 +382,10 @@ export default function ProfilePage() {
                 <div className="relative">
                   <input
                     type="number"
+                    min="0"
                     value={targetCarbsG}
                     onChange={(e) => setTargetCarbsG(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-white border border-teal-200 rounded-xl focus:border-[#0D9488] focus:outline-none text-xs font-black text-[#1A1C1C]"
+                    className="w-full px-2.5 py-1.5 bg-white border border-teal-200 rounded-xl text-xs font-black text-[#1A1C1C] focus:border-[#0D9488] focus:outline-none"
                   />
                   <span className="absolute right-2 top-2 text-[10px] font-bold text-gray-400">g</span>
                 </div>
@@ -328,9 +396,10 @@ export default function ProfilePage() {
                 <div className="relative">
                   <input
                     type="number"
+                    min="0"
                     value={targetFatG}
                     onChange={(e) => setTargetFatG(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-xl focus:border-gray-500 focus:outline-none text-xs font-black text-[#1A1C1C]"
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-black text-[#1A1C1C] focus:border-gray-500 focus:outline-none"
                   />
                   <span className="absolute right-2 top-2 text-[10px] font-bold text-gray-400">g</span>
                 </div>
@@ -391,5 +460,13 @@ export default function ProfilePage() {
 
       <AppBottomNav activeTab="profile" />
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <AuthGuard>
+      <ProfileContent />
+    </AuthGuard>
   );
 }

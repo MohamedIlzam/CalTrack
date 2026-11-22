@@ -1,8 +1,19 @@
-import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { Goal, ActivityLevel } from '../../generated/prisma/client';
+import { Goal, ActivityLevel } from '@prisma/client';
+import {
+  ACTIVITY_LEVELS,
+  GOALS,
+  optionalEnum,
+  optionalNumber,
+} from './auth.validation';
 
 @Injectable()
 export class AuthService {
@@ -42,8 +53,10 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     // Map onboarding goal & activity string values to Prisma Enums
-    const mappedGoal = goal ? goal.toUpperCase() as Goal : Goal.LOSE;
-    const mappedActivity = activityLevel ? activityLevel.toUpperCase() as ActivityLevel : ActivityLevel.SEDENTARY;
+    const mappedGoal = optionalEnum(goal, 'goal', GOALS) ?? Goal.LOSE;
+    const mappedActivity =
+      optionalEnum(activityLevel, 'activityLevel', ACTIVITY_LEVELS) ??
+      ActivityLevel.SEDENTARY;
 
     // Create user with metrics
     const user = await this.prisma.user.create({
@@ -51,15 +64,19 @@ export class AuthService {
         email,
         name,
         passwordHash,
-        weightKg: weightKg ? parseFloat(weightKg) : null,
-        targetWeightKg: targetWeightKg ? parseFloat(targetWeightKg) : null,
-        heightCm: heightCm ? parseFloat(heightCm) : null,
+        weightKg: optionalNumber(weightKg, 'weightKg', 20, 500) ?? null,
+        targetWeightKg:
+          optionalNumber(targetWeightKg, 'targetWeightKg', 20, 500) ?? null,
+        heightCm: optionalNumber(heightCm, 'heightCm', 80, 250) ?? null,
         goal: mappedGoal,
         activityLevel: mappedActivity,
-        targetCalories: targetCalories ? parseInt(targetCalories, 10) : null,
-        targetProteinG: targetProteinG ? parseInt(targetProteinG, 10) : null,
-        targetCarbsG: targetCarbsG ? parseInt(targetCarbsG, 10) : null,
-        targetFatG: targetFatG ? parseInt(targetFatG, 10) : null,
+        targetCalories:
+          optionalNumber(targetCalories, 'targetCalories', 500, 10000) ?? null,
+        targetProteinG:
+          optionalNumber(targetProteinG, 'targetProteinG', 0, 1000) ?? null,
+        targetCarbsG:
+          optionalNumber(targetCarbsG, 'targetCarbsG', 0, 2000) ?? null,
+        targetFatG: optionalNumber(targetFatG, 'targetFatG', 0, 1000) ?? null,
       },
     });
 
@@ -138,17 +155,59 @@ export class AuthService {
   async updateProfile(userId: string, dto: any) {
     const dataToUpdate: any = {};
 
-    if (dto.name !== undefined) dataToUpdate.name = dto.name;
-    if (dto.weightKg !== undefined) dataToUpdate.weightKg = parseFloat(dto.weightKg);
-    if (dto.targetWeightKg !== undefined) dataToUpdate.targetWeightKg = parseFloat(dto.targetWeightKg);
-    if (dto.heightCm !== undefined) dataToUpdate.heightCm = parseFloat(dto.heightCm);
-    if (dto.goal !== undefined) dataToUpdate.goal = dto.goal.toUpperCase() as Goal;
-    if (dto.activityLevel !== undefined) dataToUpdate.activityLevel = dto.activityLevel.toUpperCase() as ActivityLevel;
-    if (dto.targetCalories !== undefined) dataToUpdate.targetCalories = parseInt(dto.targetCalories, 10);
-    if (dto.targetProteinG !== undefined) dataToUpdate.targetProteinG = parseInt(dto.targetProteinG, 10);
-    if (dto.targetCarbsG !== undefined) dataToUpdate.targetCarbsG = parseInt(dto.targetCarbsG, 10);
-    if (dto.targetFatG !== undefined) dataToUpdate.targetFatG = parseInt(dto.targetFatG, 10);
-    if (dto.timezone !== undefined) dataToUpdate.timezone = dto.timezone;
+    if (dto.name !== undefined) {
+      if (
+        typeof dto.name !== 'string' ||
+        !dto.name.trim() ||
+        dto.name.trim().length > 100
+      ) {
+        throw new BadRequestException(
+          'Name must be between 1 and 100 characters',
+        );
+      }
+      dataToUpdate.name = dto.name.trim();
+    }
+    const numericFields = [
+      ['weightKg', 20, 500],
+      ['targetWeightKg', 20, 500],
+      ['heightCm', 80, 250],
+      ['targetCalories', 500, 10000],
+      ['targetProteinG', 0, 1000],
+      ['targetCarbsG', 0, 2000],
+      ['targetFatG', 0, 1000],
+    ] as const;
+    for (const [field, minimum, maximum] of numericFields) {
+      if (dto[field] !== undefined) {
+        dataToUpdate[field] = optionalNumber(
+          dto[field],
+          field,
+          minimum,
+          maximum,
+        );
+      }
+    }
+    if (dto.goal !== undefined) {
+      dataToUpdate.goal = optionalEnum(dto.goal, 'goal', GOALS);
+    }
+    if (dto.activityLevel !== undefined) {
+      dataToUpdate.activityLevel = optionalEnum(
+        dto.activityLevel,
+        'activityLevel',
+        ACTIVITY_LEVELS,
+      );
+    }
+    if (dto.timezone !== undefined) {
+      if (
+        typeof dto.timezone !== 'string' ||
+        dto.timezone.length > 64 ||
+        !Intl.supportedValuesOf('timeZone').includes(dto.timezone)
+      ) {
+        throw new BadRequestException(
+          'timezone must be a valid IANA time zone',
+        );
+      }
+      dataToUpdate.timezone = dto.timezone;
+    }
 
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
