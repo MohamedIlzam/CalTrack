@@ -15,28 +15,31 @@ import { NutritionRagService } from '../src/ai/intelligence/rag/nutrition-rag.se
 import { CURATED_NUTRITION_KNOWLEDGE } from '../src/ai/intelligence/rag/nutrition-knowledge-data';
 
 async function main() {
-  console.log('================================================================');
+  console.log(
+    '================================================================',
+  );
   console.log('CALTRACK CIE: NUTRITION RAG KNOWLEDGE INGESTION');
-  console.log('================================================================\n');
+  console.log(
+    '================================================================\n',
+  );
 
   const dbUrl =
+    process.env.DIRECT_DATABASE_URL ||
     process.env.DATABASE_URL ||
     (process.env.NODE_ENV === 'production'
       ? ''
       : 'postgresql://postgres:Password123%40%23%24@localhost:5433/caltrack?schema=public');
 
   if (!dbUrl) {
-    throw new Error('FATAL: DATABASE_URL environment variable is required in production mode.');
+    throw new Error(
+      'FATAL: DATABASE_URL environment variable is required in production mode.',
+    );
   }
 
-  const url = new URL(dbUrl);
-
   const pool = new Pool({
-    user: decodeURIComponent(url.username),
-    password: decodeURIComponent(url.password),
-    host: url.hostname,
-    port: parseInt(url.port || '5433', 10),
-    database: url.pathname.substring(1),
+    connectionString: dbUrl,
+    max: 2,
+    connectionTimeoutMillis: 10_000,
   });
 
   const adapter = new PrismaPg(pool);
@@ -51,15 +54,23 @@ async function main() {
   const ragService = new NutritionRagService(mockPrismaService);
   await ragService.onModuleInit();
 
-  console.log(`Starting ingestion of ${CURATED_NUTRITION_KNOWLEDGE.length} curated nutrition passages...`);
-  const result = await ragService.ingestCuratedKnowledge(CURATED_NUTRITION_KNOWLEDGE);
+  console.log(
+    `Starting ingestion of ${CURATED_NUTRITION_KNOWLEDGE.length} curated nutrition passages...`,
+  );
+  const result = await ragService.ingestCuratedKnowledge(
+    CURATED_NUTRITION_KNOWLEDGE,
+  );
 
-  console.log('\n----------------------------------------------------------------');
+  console.log(
+    '\n----------------------------------------------------------------',
+  );
   console.log('Ingestion Summary:');
   console.log(`  - Total Items Processed: ${result.totalProcessed}`);
   console.log(`  - Newly Inserted Chunks: ${result.inserted}`);
   console.log(`  - Skipped Duplicates:    ${result.skippedDuplicates}`);
-  console.log('----------------------------------------------------------------\n');
+  console.log(
+    '----------------------------------------------------------------\n',
+  );
 
   // Perform sample verification queries
   console.log('Verifying searchNutritionKnowledge retrieval:');
@@ -75,7 +86,9 @@ async function main() {
     const hits = await ragService.searchNutritionKnowledge(q, 1);
     if (hits.length > 0) {
       console.log(`  ✓ Match: [${hits[0].topic}] "${hits[0].title}"`);
-      console.log(`    Similarity: ${(hits[0].similarity * 100).toFixed(1)}% (Distance: ${hits[0].distance})`);
+      console.log(
+        `    Similarity: ${(hits[0].similarity * 100).toFixed(1)}% (Distance: ${hits[0].distance})`,
+      );
       console.log(`    Source: ${hits[0].sourceTitle}`);
     } else {
       console.log('  ✕ No matches found (distance above threshold)');
@@ -84,9 +97,13 @@ async function main() {
 
   await prismaClient.$disconnect();
   await pool.end();
-  console.log('\n================================================================');
+  console.log(
+    '\n================================================================',
+  );
   console.log('✓ Nutrition RAG seeding & verification completed successfully.');
-  console.log('================================================================');
+  console.log(
+    '================================================================',
+  );
 }
 
 main().catch((err) => {

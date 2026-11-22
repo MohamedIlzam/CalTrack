@@ -13,7 +13,7 @@ import { getJwtSecret } from './jwt.config';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: getJwtSecret(),
-      signOptions: { expiresIn: '7d' },
+      signOptions: { expiresIn: '7d', algorithm: 'HS256' },
     }),
   ],
   controllers: [AuthController],

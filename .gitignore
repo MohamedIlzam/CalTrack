@@ -6,6 +6,7 @@ node_modules/
 # Build outputs
 /backend/dist/
 /backend/generated/
+/backend/prisma/seed.js
 /frontend/.next/
 /frontend/out/
 /frontend/build/

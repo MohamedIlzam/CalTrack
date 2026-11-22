@@ -35,6 +35,25 @@ export function getCorsOrigins(): string[] | boolean {
       );
     }
 
+    for (const origin of origins) {
+      let parsed: URL;
+      try {
+        parsed = new URL(origin);
+      } catch {
+        throw new Error(`FATAL: Invalid production CORS origin: ${origin}`);
+      }
+      if (
+        parsed.protocol !== 'https:' ||
+        parsed.origin !== origin ||
+        parsed.username ||
+        parsed.password
+      ) {
+        throw new Error(
+          `FATAL: Production CORS origins must be exact HTTPS origins without paths or credentials: ${origin}`,
+        );
+      }
+    }
+
     return origins;
   }
 

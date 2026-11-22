@@ -19,18 +19,29 @@ describe('Prisma Database Configuration (Production Security Guard)', () => {
 
     it('should throw fatal error if DATABASE_URL is undefined', () => {
       delete process.env.DATABASE_URL;
-      expect(() => getDatabaseUrl()).toThrow(/DATABASE_URL environment variable is missing or empty/i);
+      expect(() => getDatabaseUrl()).toThrow(
+        /DATABASE_URL environment variable is missing or empty/i,
+      );
     });
 
     it('should throw fatal error if DATABASE_URL is empty string or whitespace', () => {
       process.env.DATABASE_URL = '   ';
-      expect(() => getDatabaseUrl()).toThrow(/DATABASE_URL environment variable is missing or empty/i);
+      expect(() => getDatabaseUrl()).toThrow(
+        /DATABASE_URL environment variable is missing or empty/i,
+      );
     });
 
     it('should return DATABASE_URL when properly configured in production', () => {
-      const prodUrl = 'postgresql://caltrack_user:StrongSecret123!@ep-prod.neon.tech/caltrack?sslmode=require';
+      const prodUrl =
+        'postgresql://caltrack_user:StrongSecret123!@ep-prod.neon.tech/caltrack?sslmode=require';
       process.env.DATABASE_URL = prodUrl;
       expect(getDatabaseUrl()).toBe(prodUrl);
+    });
+
+    it('rejects production database URLs that do not require TLS', () => {
+      process.env.DATABASE_URL =
+        'postgresql://caltrack_user:password@ep-prod.neon.tech/caltrack';
+      expect(() => getDatabaseUrl()).toThrow(/must require TLS/i);
     });
   });
 

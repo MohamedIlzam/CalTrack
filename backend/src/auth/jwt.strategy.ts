@@ -11,12 +11,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: getJwtSecret(),
+      algorithms: ['HS256'],
     });
   }
 
   async validate(payload: { sub: string; email: string }) {
+    if (!payload || typeof payload.sub !== 'string' || !payload.sub.trim()) {
+      throw new UnauthorizedException('Invalid authentication token');
+    }
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
+      select: { id: true, email: true, name: true },
     });
 
     if (!user) {

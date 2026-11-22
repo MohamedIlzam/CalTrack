@@ -6,13 +6,33 @@ import {
 } from '@nestjs/common';
 import Redis from 'ioredis';
 
+export function getRedisUrl(): string {
+  const redisUrl = process.env.REDIS_URL;
+  if (process.env.NODE_ENV === 'production') {
+    if (!redisUrl?.trim()) {
+      throw new Error('FATAL: REDIS_URL is required in production.');
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(redisUrl);
+    } catch {
+      throw new Error('FATAL: REDIS_URL is invalid.');
+    }
+    if (parsed.protocol !== 'rediss:') {
+      throw new Error('FATAL: Production REDIS_URL must use TLS (rediss://).');
+    }
+    return redisUrl;
+  }
+  return redisUrl || 'redis://localhost:6379';
+}
+
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private client: Redis;
 
   onModuleInit() {
-    this.client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+    this.client = new Redis(getRedisUrl(), {
       maxRetriesPerRequest: 3,
       enableOfflineQueue: false,
     });

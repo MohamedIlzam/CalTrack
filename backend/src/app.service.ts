@@ -1,4 +1,9 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from './prisma/prisma.service';
 import { RedisService } from './redis/redis.service';
 
@@ -41,7 +46,7 @@ export class AppService {
 
     const isHealthy = dbStatus !== 'unreachable';
 
-    return {
+    const health = {
       status: isHealthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       uptime: Math.round(process.uptime()),
@@ -51,5 +56,9 @@ export class AppService {
         redis: redisStatus,
       },
     };
+    if (!isHealthy) {
+      throw new ServiceUnavailableException(health);
+    }
+    return health;
   }
 }

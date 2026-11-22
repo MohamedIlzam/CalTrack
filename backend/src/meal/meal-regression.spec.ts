@@ -3,7 +3,11 @@ import { MealService } from './meal.service';
 import { MealController } from './meal.controller';
 import { NutritionCalculatorService } from '../food/nutrition-calculator.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 
 describe('MealService - Diary Persistence & Integrity Regressions', () => {
   let service: MealService;
@@ -36,7 +40,11 @@ describe('MealService - Diary Persistence & Integrity Regressions', () => {
       },
       food: {
         findUnique: jest.fn().mockImplementation(({ where }) => {
-          if (where.id && !where.id.startsWith('ai-') && !where.id.startsWith('custom-')) {
+          if (
+            where.id &&
+            !where.id.startsWith('ai-') &&
+            !where.id.startsWith('custom-')
+          ) {
             return Promise.resolve({ id: where.id, name: 'Known Food' });
           }
           return Promise.resolve(null);
@@ -161,7 +169,11 @@ describe('MealService - Diary Persistence & Integrity Regressions', () => {
     });
 
     expect(storedEntries).toHaveLength(3);
-    expect(storedEntries.map((e) => e.unitName)).toEqual(['Food A', 'Food B', 'Food C']);
+    expect(storedEntries.map((e) => e.unitName)).toEqual([
+      'Food A',
+      'Food B',
+      'Food C',
+    ]);
   });
 
   // Test 3: Breakfast entries are not affected by adding Lunch.
@@ -264,7 +276,10 @@ describe('MealService - Diary Persistence & Integrity Regressions', () => {
 
     const refreshedDiary = await service.getDailyLog(testUserId, testDate);
     expect(refreshedDiary.entries).toHaveLength(2);
-    expect(refreshedDiary.entries.map((e) => e.unitName)).toEqual(['Dish 1', 'Dish 2']);
+    expect(refreshedDiary.entries.map((e) => e.unitName)).toEqual([
+      'Dish 1',
+      'Dish 2',
+    ]);
   });
 
   // Test 6: Deleting one entry does not delete others.
@@ -470,6 +485,26 @@ describe('MealService - Diary Persistence & Integrity Regressions', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
+  it("Scenario 15b: Deleting another user's entry is forbidden and preserves it", async () => {
+    const entry = await service.logFood(testUserId, {
+      date: testDate,
+      meal: 'DINNER',
+      servingQuantity: 1,
+      unitName: 'bowl',
+      loggedWeightGrams: 200,
+      loggedCaloriesKcal: 300,
+      loggedProteinG: 20,
+      loggedCarbohydratesG: 25,
+      loggedFatG: 10,
+    });
+    storedEntries[0].ownerUserId = 'owner-user-id';
+
+    await expect(
+      service.deleteEntry('attacker-user-id', entry.id),
+    ).rejects.toThrow(ForbiddenException);
+    expect(storedEntries).toHaveLength(1);
+  });
+
   // Test 16: Controller rejects invalid update payloads
   it('Scenario 16: Controller validates update inputs and throws BadRequestException on invalid data', async () => {
     const req = { user: { id: testUserId } };
@@ -481,7 +516,9 @@ describe('MealService - Diary Persistence & Integrity Regressions', () => {
 
     // Invalid meal slot
     await expect(
-      controller.updateEntry(req, 'entry-123', { meal: 'MIDNIGHT_FEAST' as any }),
+      controller.updateEntry(req, 'entry-123', {
+        meal: 'MIDNIGHT_FEAST' as any,
+      }),
     ).rejects.toThrow(BadRequestException);
 
     // Negative serving quantity
