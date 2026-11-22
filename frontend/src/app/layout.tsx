@@ -33,6 +33,7 @@ export const metadata: Metadata = {
 };
 
 import Providers from "./providers";
+import { DesktopLandingScreen } from "@/components/ui/DesktopLandingScreen";
 
 export default function RootLayout({
   children,
@@ -42,10 +43,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}>
       <body className="flex justify-center min-h-[100dvh] bg-gray-100">
-        <main className="w-full max-w-md bg-surface min-h-[100dvh] shadow-2xl relative flex flex-col overflow-x-hidden overflow-y-auto border-x border-gray-200 safe-area-inset">
+        <DesktopLandingScreen />
+        <main className="w-full max-w-md bg-surface min-h-[100dvh] shadow-2xl relative flex flex-col overflow-x-hidden overflow-y-auto border-x border-gray-200 safe-area-inset lg:hidden">
           <Providers>{children}</Providers>
         </main>
-
       </body>
     </html>
   );

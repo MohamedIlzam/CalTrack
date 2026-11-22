@@ -6,13 +6,14 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "test": "node test-safe-rendering.mjs && node test-diary-integrity.mjs && node test-meal-card.mjs && node test-date-correctness.mjs && node test-search-resilience.mjs && node test-profile-logout.mjs && node test-profile-guard.mjs && node test-profile-targets-and-bmi.mjs && node test-progress-analytics.mjs && node test-unified-header.mjs && node test-api-config.mjs && node test-ai-provenance.mjs && node test-ai-privacy-mode.mjs && node test-security-headers.mjs",
+    "test": "node test-safe-rendering.mjs && node test-diary-integrity.mjs && node test-meal-card.mjs && node test-date-correctness.mjs && node test-search-resilience.mjs && node test-profile-logout.mjs && node test-profile-guard.mjs && node test-profile-targets-and-bmi.mjs && node test-progress-analytics.mjs && node test-unified-header.mjs && node test-api-config.mjs && node test-ai-provenance.mjs && node test-ai-privacy-mode.mjs && node test-security-headers.mjs && node test-desktop-qr-landing.mjs",
     "lint": "eslint"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.2",
     "motion": "^12.42.0",
     "next": "16.4.6",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zustand": "^5.0.12"
