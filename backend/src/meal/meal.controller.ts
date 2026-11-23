@@ -70,10 +70,10 @@ export class MealController {
       dto.unitName !== undefined &&
       (typeof dto.unitName !== 'string' ||
         !dto.unitName.trim() ||
-        dto.unitName.length > 80)
+        dto.unitName.length > 2048)
     ) {
       throw new BadRequestException(
-        'unitName must be between 1 and 80 characters',
+        'unitName must be between 1 and 2048 characters',
       );
     }
   }
