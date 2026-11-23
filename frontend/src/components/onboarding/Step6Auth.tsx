@@ -18,7 +18,7 @@ export function Step6Auth({ onBack, initialMode = "register" }: Props) {
   const setAuth = useAppStore((s) => s.setAuth);
 
   const [mode, setMode] = useState<"register" | "login">(initialMode);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(draft.name ?? "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,10 +33,10 @@ export function Step6Auth({ onBack, initialMode = "register" }: Props) {
       const endpoint = mode === "register" ? "register" : "login";
       const body = mode === "register" 
         ? {
+            ...draft,
             email,
             password,
-            name,
-            ...draft,
+            name: name.trim(),
           }
         : {
             email,
@@ -116,6 +116,8 @@ export function Step6Auth({ onBack, initialMode = "register" }: Props) {
               <input
                 type="text"
                 required
+                maxLength={100}
+                autoComplete="name"
                 placeholder="Enter your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
